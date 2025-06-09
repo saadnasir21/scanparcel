@@ -36,7 +36,9 @@ function processParcelScan(scannedValue) {
       dateCol    = headers.indexOf("Dispatch Date")+1,
       productCol = headers.indexOf("Product name")+1,
       qtyCol     = headers.indexOf("Quantity")+1,
-      amountCol  = headers.indexOf("Amount")+1;
+      amountCol  = headers.indexOf("Amount")+1,
+      nameCol    = headers.indexOf("Customer Name")+1,
+      phoneCol   = headers.indexOf("Phone Number")+1;
 
   if (!parcelCol) return 'ParcelColNotFound';
 
@@ -66,6 +68,23 @@ function processParcelScan(scannedValue) {
   } else {
     return 'AlreadyReturned';
   }
+
+  // check for other orders by same customer
+  var dupFound = false;
+  if (nameCol || phoneCol) {
+    var custName = nameCol ? rowData[nameCol-1] : '';
+    var phone    = phoneCol ? rowData[phoneCol-1] : '';
+    for (var r=1; r<data.length; r++) {
+      if (r===foundRow-1) continue;
+      var status = data[r][statusCol-1];
+      if (status==='Dispatched' || status==='Returned') continue;
+      if ((nameCol && data[r][nameCol-1]===custName) ||
+          (phoneCol && data[r][phoneCol-1]===phone)) {
+        dupFound = true; break;
+      }
+    }
+  }
+  if (dupFound) return 'confirmDuplicate';
 
   // write new
   sheet.getRange(foundRow,statusCol).setValue(newStatus);
@@ -165,6 +184,66 @@ function processParcelConfirmReturn(scannedValue) {
   }));
 
   return 'Returned';
+}
+
+/**
+ * After customer duplicate warning, mark Dispatched.
+ */
+function processParcelConfirmDuplicate(scannedValue) {
+  scannedValue = scannedValue.trim().replace(/\s+/g,'');
+  if (!scannedValue) return 'Empty';
+
+  var ss      = SpreadsheetApp.getActiveSpreadsheet(),
+      sheet   = ss.getSheetByName("Sheet1"),
+      headers = sheet.getRange(1,1,1,sheet.getLastColumn()).getValues()[0],
+      parcelCol  = headers.indexOf("Parcel number")+1,
+      statusCol  = headers.indexOf("Shipping Status")+1,
+      dateCol    = headers.indexOf("Dispatch Date")+1,
+      productCol = headers.indexOf("Product name")+1,
+      qtyCol     = headers.indexOf("Quantity")+1,
+      amountCol  = headers.indexOf("Amount")+1;
+
+  if (!parcelCol) return 'ParcelColNotFound';
+
+  var data = sheet.getDataRange().getValues(), foundRow = null;
+  for (var i=1; i<data.length; i++) {
+    var clean = String(data[i][parcelCol-1]).replace(/\s+/g,'');
+    if (clean.toUpperCase() === scannedValue.toUpperCase()) {
+      foundRow = i+1; break;
+    }
+  }
+  if (!foundRow) return 'NotFound';
+
+  var rowData   = sheet.getRange(foundRow,1,1,sheet.getLastColumn()).getValues()[0],
+      oldStatus = statusCol ? rowData[statusCol-1] : '',
+      oldDate   = dateCol   ? rowData[dateCol-1] : null;
+
+  if (oldStatus==='Dispatched' || oldStatus==='Returned') {
+    return oldStatus==='Dispatched' ? 'confirmReturn' : 'AlreadyReturned';
+  }
+
+  sheet.getRange(foundRow,statusCol).setValue('Dispatched');
+  var now = new Date(), todayMid = new Date(now.getFullYear(),now.getMonth(),now.getDate());
+  sheet.getRange(foundRow,dateCol).setValue(todayMid);
+
+  var products   = String(rowData[productCol-1]).split('\n').map(s=>s.trim()).filter(Boolean),
+      quantities = String(rowData[qtyCol-1]).split('\n').map(s=>s.trim()).filter(Boolean),
+      orderAmt   = amountCol ? Number(rowData[amountCol-1]||0) : 0;
+
+  updateDispatchSummaries(products, quantities, orderAmt, todayMid);
+
+  DOC_PROPS.setProperty('lastAction', JSON.stringify({
+    type:       'dispatch',
+    row:        foundRow,
+    oldStatus:  oldStatus,
+    oldDate:    oldDate instanceof Date ? oldDate.toISOString() : null,
+    newDate:    todayMid.toISOString(),
+    products:   products,
+    quantities: quantities,
+    amount:     orderAmt
+  }));
+
+  return 'Dispatched';
 }
 
 /**
