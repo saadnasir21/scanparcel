@@ -692,9 +692,12 @@ function manualSetStatus(parcelRaw, newStatus, dateStr) {
   var sheet  = ss.getSheetByName("Sheet1");
   var head   = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
 
-  var parcelCol = head.indexOf("Parcel number") + 1;
-  var statusCol = head.indexOf("Shipping Status") + 1;
-  var dateCol   = head.indexOf("Dispatch Date") + 1;
+  var parcelCol  = head.indexOf("Parcel number") + 1;
+  var statusCol  = head.indexOf("Shipping Status") + 1;
+  var dateCol    = head.indexOf("Dispatch Date") + 1;
+  var productCol = head.indexOf("Product name") + 1;
+  var qtyCol     = head.indexOf("Quantity") + 1;
+  var amountCol  = head.indexOf("Amount") + 1;
 
   if (!parcelCol || !statusCol || !dateCol) return 'MissingHeaders';
 
@@ -709,11 +712,38 @@ function manualSetStatus(parcelRaw, newStatus, dateStr) {
   }
   if (foundRow === -1) return 'NotFound';
 
-  var dateObj = dateStr ? new Date(dateStr) : new Date();
-  dateObj.setHours(0,0,0,0);
+  var rowData   = data[foundRow - 1];
+  var oldStatus = rowData[statusCol - 1];
+  var oldDate   = rowData[dateCol - 1];
 
+  var dateObj = dateStr ? new Date(dateStr) : new Date();
+  dateObj.setHours(0, 0, 0, 0);
+
+  var products   = productCol ? String(rowData[productCol - 1]).split('\n').map(function(s){return s.trim();}).filter(Boolean) : [];
+  var quantities = qtyCol ? String(rowData[qtyCol - 1]).split('\n').map(function(s){return s.trim();}).filter(Boolean) : [];
+  var orderAmt   = amountCol ? Number(rowData[amountCol - 1] || 0) : 0;
+
+  var oldDateObj = oldDate ? (oldDate instanceof Date ? oldDate : new Date(oldDate)) : null;
+
+  // remove previous summary data if needed
+  if (oldDateObj) {
+    if (oldStatus === 'Dispatched') {
+      reverseDispatchSummaries(products, quantities, orderAmt, oldDateObj);
+    } else if (oldStatus === 'Returned') {
+      reverseReturnSummaries(products, quantities, orderAmt, oldDateObj);
+    }
+  }
+
+  // write new status/date
   sheet.getRange(foundRow, statusCol).setValue(newStatus);
   sheet.getRange(foundRow, dateCol).setValue(dateObj);
+
+  // add new summary data if needed
+  if (newStatus === 'Dispatched') {
+    updateDispatchSummaries(products, quantities, orderAmt, dateObj);
+  } else if (newStatus === 'Returned') {
+    updateReturnSummaries(products, quantities, orderAmt, dateObj);
+  }
 
   return 'Updated';
 }
