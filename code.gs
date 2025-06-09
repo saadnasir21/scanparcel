@@ -297,7 +297,8 @@ function updateDispatchSummaries(products, quantities, amount, dateObj) {
       var found = false;
       for (var r=1; r<data.length; r++) {
         var rowDate = data[r][0], rowProd = data[r][1], rowQty = data[r][2];
-        if (rowDate instanceof Date && rowDate.getTime()===today.getTime() && rowProd===name) {
+        if (!(rowDate instanceof Date)) rowDate = new Date(rowDate);
+        if (rowDate.toDateString() === today.toDateString() && rowProd===name) {
           prodSh.getRange(r+1,3).setValue(Number(rowQty||0)+qty);
           found = true;
           break;
@@ -340,7 +341,8 @@ function updateReturnSummaries(products, quantities, amount, dateObj) {
       var found = false;
       for (var r=1; r<data.length; r++) {
         var rowDate = data[r][0], rowProd = data[r][1], rowQty = data[r][2];
-        if (rowDate instanceof Date && rowDate.getTime()===today.getTime() && rowProd===name) {
+        if (!(rowDate instanceof Date)) rowDate = new Date(rowDate);
+        if (rowDate.toDateString() === today.toDateString() && rowProd===name) {
           prodSh.getRange(r+1,3).setValue(Number(rowQty||0)+qty);
           found = true;
           break;
