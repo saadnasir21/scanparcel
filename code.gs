@@ -677,3 +677,43 @@ function cancelOrderByNumber(orderNumRaw) {
 
 
 
+/**
+ * Manually set the shipping status and optional date for a parcel.
+ * @param {string} parcelRaw Parcel number.
+ * @param {string} newStatus Status text to set.
+ * @param {string} dateStr   Optional date string YYYY-MM-DD.
+ * @return {string} result code.
+ */
+function manualSetStatus(parcelRaw, newStatus, dateStr) {
+  var parcel = String(parcelRaw).trim().replace(/\s+/g, '');
+  if (!parcel) return 'Empty';
+
+  var ss     = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet  = ss.getSheetByName("Sheet1");
+  var head   = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+
+  var parcelCol = head.indexOf("Parcel number") + 1;
+  var statusCol = head.indexOf("Shipping Status") + 1;
+  var dateCol   = head.indexOf("Dispatch Date") + 1;
+
+  if (!parcelCol || !statusCol || !dateCol) return 'MissingHeaders';
+
+  var data     = sheet.getDataRange().getValues();
+  var foundRow = -1;
+  for (var r = 1; r < data.length; r++) {
+    var val = String(data[r][parcelCol - 1]).replace(/\s+/g, '');
+    if (val.toUpperCase() === parcel.toUpperCase()) {
+      foundRow = r + 1;
+      break;
+    }
+  }
+  if (foundRow === -1) return 'NotFound';
+
+  var dateObj = dateStr ? new Date(dateStr) : new Date();
+  dateObj.setHours(0,0,0,0);
+
+  sheet.getRange(foundRow, statusCol).setValue(newStatus);
+  sheet.getRange(foundRow, dateCol).setValue(dateObj);
+
+  return 'Updated';
+}
