@@ -36,15 +36,17 @@ Shopify features will be skipped.
 ## Using the Sidebar
 
 Select **Scanner → Open Scanner Sidebar** from the spreadsheet menu. The sidebar
-contains a single input box and three buttons:
+contains a single input box and four buttons:
 
 - **Scan** – records the parcel as dispatched or prompts to mark it returned.
 - The scan will also warn if another undelivered order has the same customer
   name or phone number so you can choose whether to dispatch it.
 - **Undo Last Scan** – reverts the most recent scan and adjusts the summary
   sheets.
-- **Cancel Order** – marks an order as "Cancelled by Customer" and attempts to
-  cancel the corresponding order on Shopify.
+- **Cancel Order** – marks an order as "Cancelled by Customer" using the parcel
+  number and attempts to cancel the corresponding order on Shopify.
+- **Cancel by Order #** – enter just the numeric portion of an order number to
+  cancel it in the sheet and on Shopify.
 
 After each action a short message appears at the bottom of the sidebar to confirm
 what happened.

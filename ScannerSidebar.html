@@ -82,6 +82,7 @@
   <button onclick="submitScan()">Scan</button>
   <button onclick="undoScan()">Undo Last Scan</button>
   <button onclick="cancelManual()">Cancel Order</button>
+  <button onclick="cancelByOrderNumber()">Cancel by Order #</button>
   <div id="statusMessage"></div>
 
   <script>
@@ -104,6 +105,26 @@
         showMessage(map[res] || res);
         resetInput();
       }).cancelOrderByCustomer(code);
+    }
+
+    function cancelByOrderNumber() {
+      const code = document.getElementById('parcelInput').value.trim();
+      if (!code) return;
+
+      if (!confirm("Are you sure this order was cancelled by customer?")) return;
+
+      google.script.run.withSuccessHandler(res => {
+        const map = {
+          'Cancelled': '✅ Cancelled & synced to Shopify',
+          'TooLate':   '⚠️ Already dispatched/returned',
+          'NotFound':  '❌ Order not found',
+          'OrderNotFoundOnShopify': '🛑 Shopify order not found',
+          'ShopifyFail': '❌ Failed to cancel on Shopify',
+          'MissingHeaders': '⚠️ Check column headers'
+        };
+        showMessage(map[res] || res);
+        resetInput();
+      }).cancelOrderByNumber(code);
     }
   </script>
 </body>

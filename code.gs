@@ -625,6 +625,55 @@ function cancelOrderByCustomer(parcelNumberRaw) {
   }
 }
 
+/**
+ * Cancel by entering the order number instead of the parcel.
+ * The input can be the full order string or just the numeric portion.
+ */
+function cancelOrderByNumber(orderNumRaw) {
+  var orderNum = String(orderNumRaw).trim().replace(/^#/, '');
+  if (!orderNum) return 'Empty';
+
+  var ss    = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName("Sheet1");
+  var head  = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+
+  var orderCol  = head.indexOf("Order Number") + 1;
+  var statusCol = head.indexOf("Shipping Status") + 1;
+  var dateCol   = head.indexOf("Dispatch Date") + 1;
+
+  if (!orderCol || !statusCol || !dateCol) return 'MissingHeaders';
+
+  var data     = sheet.getDataRange().getValues();
+  var foundRow = -1;
+  for (var r = 1; r < data.length; r++) {
+    var val = String(data[r][orderCol - 1]).trim().replace(/^#/, '');
+    if (val.toUpperCase().indexOf(orderNum.toUpperCase()) === 0) {
+      foundRow = r + 1;
+      break;
+    }
+  }
+  if (foundRow === -1) return 'NotFound';
+
+  var rowData = data[foundRow - 1];
+  var status  = rowData[statusCol - 1];
+  if (status === "Dispatched" || status === "Returned") {
+    return 'TooLate';
+  }
+
+  sheet.getRange(foundRow, statusCol).setValue("Cancelled by Customer");
+  var todayMid = new Date(); todayMid.setHours(0, 0, 0, 0);
+  sheet.getRange(foundRow, dateCol).setValue(todayMid);
+
+  var orderName = rowData[orderCol - 1];
+  var orderId   = findOrderIdByName(orderName);
+  if (orderId) {
+    var ok = cancelOrderById(orderId);
+    return ok ? 'Cancelled' : 'ShopifyFail';
+  } else {
+    return 'OrderNotFoundOnShopify';
+  }
+}
+
 
 
 
