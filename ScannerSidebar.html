@@ -1,4 +1,3 @@
- 
 <!DOCTYPE html>
 <html>
   <head>
@@ -6,6 +5,7 @@
     <style>
       #statusMessage { margin-top:8px; font-weight:bold; color:#007500; }
       button { margin-right:4px; }
+      .inline { margin-top:6px; }
     </style>
     <script>
       // show a quick non-blocking message
@@ -68,12 +68,30 @@
         inp.focus();
       }
 
+      function applyStatus() {
+        var code   = document.getElementById('parcelInput').value.trim();
+        var status = document.getElementById('statusInput').value.trim();
+        var date   = document.getElementById('statusDate').value;
+        if (!code || !status) return;
+        google.script.run.withSuccessHandler(res => {
+          var map = {
+            'Updated': '✅ Status updated',
+            'NotFound': '❌ Parcel not found',
+            'MissingHeaders': '⚠️ Check column headers'
+          };
+          showMessage(map[res] || res);
+          resetInput();
+        }).manualSetStatus(code, status, date);
+      }
+
       document.addEventListener('DOMContentLoaded',()=>{
         var inp = document.getElementById('parcelInput');
         inp.focus();
         inp.addEventListener('keyup', e=>{
           if (e.keyCode===13) submitScan();
         });
+        var today = new Date().toISOString().substr(0,10);
+        document.getElementById('statusDate').value = today;
       });
     </script>
   </head>
@@ -83,6 +101,16 @@
   <button onclick="undoScan()">Undo Last Scan</button>
   <button onclick="cancelManual()">Cancel Order</button>
   <button onclick="cancelByOrderNumber()">Cancel by Order #</button>
+  <div class="inline">
+    <input id="statusInput" list="statusList" placeholder="Custom Status">
+    <datalist id="statusList">
+      <option value="Dispatched">
+      <option value="Returned">
+      <option value="Cancelled by Customer">
+    </datalist>
+    <input type="date" id="statusDate">
+    <button onclick="applyStatus()">Set Status</button>
+  </div>
   <div id="statusMessage"></div>
 
   <script>
