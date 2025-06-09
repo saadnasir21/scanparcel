@@ -677,3 +677,73 @@ function cancelOrderByNumber(orderNumRaw) {
 
 
 
+/**
+ * Manually set the shipping status and optional date for a parcel.
+ * @param {string} parcelRaw Parcel number.
+ * @param {string} newStatus Status text to set.
+ * @param {string} dateStr   Optional date string YYYY-MM-DD.
+ * @return {string} result code.
+ */
+function manualSetStatus(parcelRaw, newStatus, dateStr) {
+  var parcel = String(parcelRaw).trim().replace(/\s+/g, '');
+  if (!parcel) return 'Empty';
+
+  var ss    = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName("Sheet1");
+  var head  = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+
+  var parcelCol  = head.indexOf("Parcel number") + 1;
+  var statusCol  = head.indexOf("Shipping Status") + 1;
+  var dateCol    = head.indexOf("Dispatch Date") + 1;
+  var productCol = head.indexOf("Product name") + 1;
+  var qtyCol     = head.indexOf("Quantity") + 1;
+  var amountCol  = head.indexOf("Amount") + 1;
+
+  if (!parcelCol || !statusCol || !dateCol) return 'MissingHeaders';
+
+  var data     = sheet.getDataRange().getValues();
+  var foundRow = -1;
+  for (var r = 1; r < data.length; r++) {
+    var val = String(data[r][parcelCol - 1]).replace(/\s+/g, '');
+    if (val.toUpperCase() === parcel.toUpperCase()) {
+      foundRow = r + 1;
+      break;
+    }
+  }
+  if (foundRow === -1) return 'NotFound';
+
+  var rowData   = data[foundRow - 1];
+  var oldStatus = rowData[statusCol - 1];
+  var oldDate   = rowData[dateCol - 1];
+
+  var products = productCol
+                 ? String(rowData[productCol - 1]).split('\n').map(function(s){return s.trim();}).filter(Boolean)
+                 : [];
+  var quantities = qtyCol
+                   ? String(rowData[qtyCol - 1]).split('\n').map(function(s){return s.trim();}).filter(Boolean)
+                   : [];
+  var orderAmt = amountCol ? Number(rowData[amountCol - 1] || 0) : 0;
+
+  var newDateObj = dateStr ? new Date(dateStr) : new Date();
+  newDateObj.setHours(0, 0, 0, 0);
+
+  // reverse previous summaries if needed
+  if (oldStatus === 'Dispatched' && oldDate instanceof Date) {
+    reverseDispatchSummaries(products, quantities, orderAmt, oldDate);
+  } else if (oldStatus === 'Returned' && oldDate instanceof Date) {
+    reverseReturnSummaries(products, quantities, orderAmt, oldDate);
+  }
+
+  // set new values
+  sheet.getRange(foundRow, statusCol).setValue(newStatus);
+  sheet.getRange(foundRow, dateCol).setValue(newDateObj);
+
+  // update summaries for new status
+  if (newStatus === 'Dispatched') {
+    updateDispatchSummaries(products, quantities, orderAmt, newDateObj);
+  } else if (newStatus === 'Returned') {
+    updateReturnSummaries(products, quantities, orderAmt, newDateObj);
+  }
+
+  return 'Updated';
+}
