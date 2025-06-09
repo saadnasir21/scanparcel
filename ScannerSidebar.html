@@ -75,17 +75,6 @@
   <div id="statusMessage"></div>
 
   <script>
-    function msg(text) {
-      const s = document.getElementById('statusMessage');
-      s.textContent = text;
-      setTimeout(() => s.textContent = '', 2000);
-    }
-
-    function resetInput() {
-      const i = document.getElementById('parcelInput');
-      i.value = '';
-      i.focus();
-    }
 
     function cancelManual() {
       const code = document.getElementById('parcelInput').value.trim();
@@ -102,7 +91,7 @@
           'ShopifyFail': '❌ Failed to cancel on Shopify',
           'MissingHeaders': '⚠️ Check column headers'
         };
-        msg(map[res] || res);
+        showMessage(map[res] || res);
         resetInput();
       }).cancelOrderByCustomer(code);
     }
