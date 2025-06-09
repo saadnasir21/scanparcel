@@ -1,0 +1,112 @@
+ 
+<!DOCTYPE html>
+<html>
+  <head>
+    <base target="_top">
+    <style>
+      #statusMessage { margin-top:8px; font-weight:bold; color:#007500; }
+      button { margin-right:4px; }
+    </style>
+    <script>
+      // show a quick non-blocking message
+      function showMessage(msg) {
+        var div = document.getElementById('statusMessage');
+        div.textContent = msg;
+        setTimeout(()=> div.textContent = '', 1500);
+      }
+
+      // scan handler
+      function submitScan() {
+        var inp = document.getElementById('parcelInput');
+        var code = inp.value.trim();
+        if (!code) return;
+        google.script.run
+          .withSuccessHandler(res=>{
+            if (res==='Dispatched')       showMessage('✓ Dispatched');
+            else if (res==='confirmReturn') {
+              // confirm before return
+              if (confirm('Marked Dispatched — mark as Returned instead?')) {
+                google.script.run
+                  .withSuccessHandler(r2=>{
+                    showMessage(r2==='Returned'? '↺ Returned' : 'ERR:'+r2);
+                  })
+                  .processParcelConfirmReturn(code);
+              } else showMessage('⏎ Skipped');
+            }
+            else if (res==='AlreadyReturned') showMessage('⚠️ Already returned');
+            else if (res==='NotFound')        showMessage('❌ Not found');
+            else showMessage('?? '+res);
+            resetInput();
+          })
+          .processParcelScan(code);
+      }
+
+      // undo handler
+      function undoScan() {
+        google.script.run
+          .withSuccessHandler(res=>{
+            if (res==='Undone')    showMessage('↶ Last scan undone');
+            else if (res==='NoAction') showMessage('⚠️ Nothing to undo');
+            else showMessage('ERR:'+res);
+          })
+          .undoLastScan();
+      }
+
+      function resetInput() {
+        var inp = document.getElementById('parcelInput');
+        inp.value = '';
+        inp.focus();
+      }
+
+      document.addEventListener('DOMContentLoaded',()=>{
+        var inp = document.getElementById('parcelInput');
+        inp.focus();
+        inp.addEventListener('keyup', e=>{
+          if (e.keyCode===13) submitScan();
+        });
+      });
+    </script>
+  </head>
+  <body>
+  <input type="text" id="parcelInput" placeholder="Scan Parcel Here" autofocus style="width:70%">
+  <button onclick="submitScan()">Scan</button>
+  <button onclick="undo()">Undo Last Scan</button>
+  <button onclick="cancelManual()">Cancel Order</button>
+  <div id="statusMessage"></div>
+
+  <script>
+    function msg(text) {
+      const s = document.getElementById('statusMessage');
+      s.textContent = text;
+      setTimeout(() => s.textContent = '', 2000);
+    }
+
+    function resetInput() {
+      const i = document.getElementById('parcelInput');
+      i.value = '';
+      i.focus();
+    }
+
+    function cancelManual() {
+      const code = document.getElementById('parcelInput').value.trim();
+      if (!code) return;
+
+      if (!confirm("Are you sure this order was cancelled by customer?")) return;
+
+      google.script.run.withSuccessHandler(res => {
+        const map = {
+          'Cancelled': '✅ Cancelled & synced to Shopify',
+          'TooLate':   '⚠️ Already dispatched/returned',
+          'NotFound':  '❌ Parcel not found',
+          'OrderNotFoundOnShopify': '🛑 Shopify order not found',
+          'ShopifyFail': '❌ Failed to cancel on Shopify',
+          'MissingHeaders': '⚠️ Check column headers'
+        };
+        msg(map[res] || res);
+        resetInput();
+      }).cancelOrderByCustomer(code);
+    }
+  </script>
+</body>
+
+</html>
