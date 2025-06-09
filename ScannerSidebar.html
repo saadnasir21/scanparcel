@@ -33,6 +33,16 @@
                   .processParcelConfirmReturn(code);
               } else showMessage('⏎ Skipped');
             }
+            else if (res==='confirmDuplicate') {
+              var msg = 'Multiple orders for this customer. Dispatch anyway?';
+              if (confirm(msg)) {
+                google.script.run
+                  .withSuccessHandler(r2=>{
+                    showMessage(r2==='Dispatched'? '✓ Dispatched' : 'ERR:'+r2);
+                  })
+                  .processParcelConfirmDuplicate(code);
+              } else showMessage('⏎ Held');
+            }
             else if (res==='AlreadyReturned') showMessage('⚠️ Already returned');
             else if (res==='NotFound')        showMessage('❌ Not found');
             else showMessage('?? '+res);

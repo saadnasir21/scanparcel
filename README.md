@@ -39,6 +39,8 @@ Select **Scanner → Open Scanner Sidebar** from the spreadsheet menu. The sideb
 contains a single input box and three buttons:
 
 - **Scan** – records the parcel as dispatched or prompts to mark it returned.
+- The scan will also warn if another undelivered order has the same customer
+  name or phone number so you can choose whether to dispatch it.
 - **Undo Last Scan** – reverts the most recent scan and adjusts the summary
   sheets.
 - **Cancel Order** – marks an order as "Cancelled by Customer" and attempts to
