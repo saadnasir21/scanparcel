@@ -148,11 +148,9 @@ function processParcelConfirmReturn(scannedValue) {
   // update
   updateReturnSummaries(products, quantities, orderAmt, todayMid);
 
-    // ---- Shopify auto cancel by order number in column B (index 1) ----
+  // ---- Shopify auto cancel using the order column ----
   var orderNumber = orderCol ? rowData[orderCol - 1] : '';
   if (orderNumber) shopifyCancelByNumber(orderNumber);
-
-
 
   // record undo
   DOC_PROPS.setProperty('lastAction', JSON.stringify({
@@ -166,19 +164,7 @@ function processParcelConfirmReturn(scannedValue) {
     amount:     orderAmt
   }));
 
-    // ---- Shopify auto cancel ----
-  var orderName = orderCol ? rowData[orderCol - 1] : '';
-  var orderId   = findOrderIdByName(orderName);
-  if (orderId) {
-    var ok = cancelOrderById(orderId);
-    Logger.log('Shopify cancel ' + orderName + ' → ' + (ok ? 'OK' : 'FAILED'));
-  } else {
-    Logger.log('Shopify order not found for ' + orderName);
-  }
-
   return 'Returned';
-  
-   
 }
 
 /**
