@@ -47,6 +47,6 @@ contains a single input box and four buttons:
   number and attempts to cancel the corresponding order on Shopify.
 - **Cancel by Order #** – enter just the numeric portion of an order number to
   cancel it in the sheet and on Shopify.
-
+- **Set Custom Status** – choose a status like "Dispatched" or "Returned" and optionally select a date to apply it.
 After each action a short message appears at the bottom of the sidebar to confirm
 what happened.
