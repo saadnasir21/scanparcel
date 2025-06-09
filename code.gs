@@ -114,6 +114,7 @@ function processParcelConfirmReturn(scannedValue) {
       productCol = headers.indexOf("Product name")+1,
       qtyCol     = headers.indexOf("Quantity")+1,
       amountCol  = headers.indexOf("Amount")+1;
+      orderCol   = headers.indexOf("Order Number")+1;
 
   if (!parcelCol) return 'ParcelColNotFound';
 
@@ -148,7 +149,7 @@ function processParcelConfirmReturn(scannedValue) {
   updateReturnSummaries(products, quantities, orderAmt, todayMid);
 
     // ---- Shopify auto cancel by order number in column B (index 1) ----
-  var orderNumber = rowData[1];                // column B in Sheet1
+  var orderNumber = orderCol ? rowData[orderCol - 1] : '';
   if (orderNumber) shopifyCancelByNumber(orderNumber);
 
 
@@ -166,8 +167,8 @@ function processParcelConfirmReturn(scannedValue) {
   }));
 
     // ---- Shopify auto cancel ----
-  var orderName = rowData[head.indexOf('Order Number')];  // adjust header if needed
-  var orderId   = findOrderIdByName(orderName);           // or pull directly if you store ID
+  var orderName = orderCol ? rowData[orderCol - 1] : '';
+  var orderId   = findOrderIdByName(orderName);
   if (orderId) {
     var ok = cancelOrderById(orderId);
     Logger.log('Shopify cancel ' + orderName + ' → ' + (ok ? 'OK' : 'FAILED'));
