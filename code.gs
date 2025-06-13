@@ -74,13 +74,17 @@ function processParcelScan(scannedValue) {
   if (nameCol || phoneCol) {
     var custName = nameCol ? rowData[nameCol-1] : '';
     var phone    = phoneCol ? rowData[phoneCol-1] : '';
-    for (var r=1; r<data.length; r++) {
-      if (r===foundRow-1) continue;
-      var status = data[r][statusCol-1];
-      if (status==='Dispatched' || status==='Returned') continue;
-      if ((nameCol && data[r][nameCol-1]===custName) ||
-          (phoneCol && data[r][phoneCol-1]===phone)) {
-        dupFound = true; break;
+    if (custName || phone) { // only check when name or phone is present
+      for (var r=1; r<data.length; r++) {
+        if (r===foundRow-1) continue;
+        var status = data[r][statusCol-1];
+        if (status==='Dispatched' || status==='Returned') continue;
+        if (custName && nameCol && data[r][nameCol-1]===custName) {
+          dupFound = true; break;
+        }
+        if (phone && phoneCol && data[r][phoneCol-1]===phone) {
+          dupFound = true; break;
+        }
       }
     }
   }
