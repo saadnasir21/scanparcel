@@ -58,6 +58,11 @@ function processParcelScan(scannedValue) {
       oldStatus = statusCol ? rowData[statusCol-1] : '',
       oldDate   = dateCol   ? rowData[dateCol-1] : null;
 
+  // prevent dispatching an order cancelled by the customer
+  if (String(oldStatus).trim() === 'Cancelled by Customer') {
+    return 'WasCancelled';
+  }
+
   // decide
   var actionType, newStatus;
   if (!oldStatus || (oldStatus!=='Dispatched' && oldStatus!=='Returned')) {
@@ -221,6 +226,9 @@ function processParcelConfirmDuplicate(scannedValue) {
   var rowData   = sheet.getRange(foundRow,1,1,sheet.getLastColumn()).getValues()[0],
       oldStatus = statusCol ? rowData[statusCol-1] : '',
       oldDate   = dateCol   ? rowData[dateCol-1] : null;
+    if (String(oldStatus).trim() === "Cancelled by Customer") {
+        return "WasCancelled";
+    }
 
   if (oldStatus==='Dispatched' || oldStatus==='Returned') {
     return oldStatus==='Dispatched' ? 'confirmReturn' : 'AlreadyReturned';
@@ -719,6 +727,10 @@ function manualSetStatus(parcelRaw, newStatus, dateStr) {
   var rowData   = data[foundRow - 1];
   var oldStatus = rowData[statusCol - 1];
   var oldDate   = rowData[dateCol - 1];
+
+  if (String(oldStatus).trim() === 'Cancelled by Customer' && newStatus === 'Dispatched') {
+    return 'WasCancelled';
+  }
 
   var dateObj = dateStr ? new Date(dateStr) : new Date();
   dateObj.setHours(0, 0, 0, 0);
