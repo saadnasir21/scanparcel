@@ -43,6 +43,7 @@
                   .processParcelConfirmDuplicate(code);
               } else showMessage('⏎ Held');
             }
+            else if (res==='WasCancelled') showMessage('⚠️ Order was cancelled');
             else if (res==='AlreadyReturned') showMessage('⚠️ Already returned');
             else if (res==='NotFound')        showMessage('❌ Not found');
             else showMessage('?? '+res);
@@ -77,7 +78,8 @@
           var map = {
             'Updated': '✅ Status updated',
             'NotFound': '❌ Parcel not found',
-            'MissingHeaders': '⚠️ Check column headers'
+            'MissingHeaders': '⚠️ Check column headers',
+            'WasCancelled': '⚠️ Order was cancelled'
           };
           showMessage(map[res] || res);
           resetInput();
