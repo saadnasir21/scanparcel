@@ -22,6 +22,16 @@ function openScannerSidebar() {
 }
 
 /**
+ * Highlight and navigate to the given row on the active sheet.
+ * @param {GoogleAppsScript.Spreadsheet.Sheet} sheet The sheet to activate.
+ * @param {number} row Row number to highlight.
+ */
+function highlightRow(sheet, row) {
+  sheet.setActiveRange(sheet.getRange(row, 1, 1, sheet.getLastColumn()));
+  SpreadsheetApp.flush();
+}
+
+/**
  * First-time scan handler: marks Dispatched or signals confirmReturn.
  */
 function processParcelScan(scannedValue) {
@@ -42,16 +52,19 @@ function processParcelScan(scannedValue) {
 
   if (!parcelCol) return 'ParcelColNotFound';
 
-  // find row
-  var data = sheet.getDataRange().getValues(),
-      foundRow = null;
-  for (var i=1; i<data.length; i++) {
-    var clean = String(data[i][parcelCol-1]).replace(/\s+/g,'');
+  // find row quickly using only the parcel column
+  var last = sheet.getLastRow();
+  var parcelData = sheet.getRange(2, parcelCol, last-1, 1).getValues();
+  var foundRow = null;
+  for (var i = 0; i < parcelData.length; i++) {
+    var clean = String(parcelData[i][0]).replace(/\s+/g, '');
     if (clean.toUpperCase() === scannedValue.toUpperCase()) {
-      foundRow = i+1; break;
+      foundRow = i + 2; // adjust for header row
+      break;
     }
   }
   if (!foundRow) return 'NotFound';
+  var data = sheet.getDataRange().getValues();
 
   // read old
   var rowData   = sheet.getRange(foundRow,1,1,sheet.getLastColumn()).getValues()[0],
@@ -122,7 +135,7 @@ function processParcelScan(scannedValue) {
     quantities: quantities,
     amount:     orderAmt
   }));
-
+  highlightRow(sheet, foundRow);
   return 'Dispatched';
 }
 
@@ -146,13 +159,15 @@ function processParcelConfirmReturn(scannedValue) {
 
   if (!parcelCol) return 'ParcelColNotFound';
 
-  // find row
-  var data = sheet.getDataRange().getValues(),
-      foundRow = null;
-  for (var i=1; i<data.length; i++) {
-    var clean = String(data[i][parcelCol-1]).replace(/\s+/g,'');
+  // find row quickly using only the parcel column
+  var last = sheet.getLastRow();
+  var data = sheet.getRange(2, parcelCol, last-1, 1).getValues();
+  var foundRow = null;
+  for (var i = 0; i < data.length; i++) {
+    var clean = String(data[i][0]).replace(/\s+/g, '');
     if (clean.toUpperCase() === scannedValue.toUpperCase()) {
-      foundRow = i+1; break;
+      foundRow = i + 2;
+      break;
     }
   }
   if (!foundRow) return 'NotFound';
@@ -191,7 +206,7 @@ function processParcelConfirmReturn(scannedValue) {
     quantities: quantities,
     amount:     orderAmt
   }));
-
+  highlightRow(sheet, foundRow);
   return 'Returned';
 }
 
@@ -214,11 +229,14 @@ function processParcelConfirmDuplicate(scannedValue) {
 
   if (!parcelCol) return 'ParcelColNotFound';
 
-  var data = sheet.getDataRange().getValues(), foundRow = null;
-  for (var i=1; i<data.length; i++) {
-    var clean = String(data[i][parcelCol-1]).replace(/\s+/g,'');
+  var last = sheet.getLastRow();
+  var data = sheet.getRange(2, parcelCol, last-1, 1).getValues();
+  var foundRow = null;
+  for (var i = 0; i < data.length; i++) {
+    var clean = String(data[i][0]).replace(/\s+/g, '');
     if (clean.toUpperCase() === scannedValue.toUpperCase()) {
-      foundRow = i+1; break;
+      foundRow = i + 2;
+      break;
     }
   }
   if (!foundRow) return 'NotFound';
@@ -254,7 +272,7 @@ function processParcelConfirmDuplicate(scannedValue) {
     quantities: quantities,
     amount:     orderAmt
   }));
-
+  highlightRow(sheet, foundRow);
   return 'Dispatched';
 }
 
