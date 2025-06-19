@@ -8,6 +8,10 @@ function onOpen() {
   SpreadsheetApp.getUi()
     .createMenu('Scanner')
     .addItem('Open Scanner Sidebar', 'openScannerSidebar')
+    .addSubMenu(SpreadsheetApp.getUi().createMenu('Dispatch Summary')
+      .addItem('Last 5 Days', 'showDispatchSummaryLast5')
+      .addItem('Last Week', 'showDispatchSummaryWeek')
+      .addItem('Last Month', 'showDispatchSummaryMonth'))
     .addToUi();
 }
 
@@ -781,3 +785,44 @@ function manualSetStatus(parcelRaw, newStatus, dateStr) {
 
   return 'Updated';
 }
+
+
+/**
+ * Generate a summary sheet of dispatched products for the last `days` days.
+ * Results are written to a sheet named "Dispatch Summary".
+ * @param {number} days Number of days to include.
+ */
+function updateDispatchSummarySheet(days) {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var source = ss.getSheetByName('Product wise daily dispatch');
+  if (!source) return 'MissingSheet';
+  var out = ss.getSheetByName('Dispatch Summary');
+  if (!out) out = ss.insertSheet('Dispatch Summary');
+  out.clearContents();
+  out.appendRow(['Product name', 'Quantity']);
+
+  var today = new Date();
+  today.setHours(0,0,0,0);
+  var start = new Date(today.getTime() - (days-1)*24*60*60*1000);
+
+  var rows = source.getDataRange().getValues();
+  var totals = {};
+  for (var i=1; i<rows.length; i++) {
+    var d = rows[i][0];
+    var prod = rows[i][1];
+    var qty = Number(rows[i][2]||0);
+    if (!(d instanceof Date)) d = new Date(d);
+    if (d >= start && d <= today) {
+      totals[prod] = (totals[prod]||0) + qty;
+    }
+  }
+  var keys = Object.keys(totals).sort();
+  for (var j=0; j<keys.length; j++) {
+    out.appendRow([keys[j], totals[keys[j]]]);
+  }
+  return 'Updated';
+}
+
+function showDispatchSummaryLast5()  { updateDispatchSummarySheet(5); }
+function showDispatchSummaryWeek()   { updateDispatchSummarySheet(7); }
+function showDispatchSummaryMonth()  { updateDispatchSummarySheet(30); }

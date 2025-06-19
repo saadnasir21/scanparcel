@@ -51,3 +51,8 @@ contains a single input box and four buttons:
 - **Set Custom Status** – choose a status like "Dispatched" or "Returned" and optionally select a date to apply it.
 After each action a short message appears at the bottom of the sidebar to confirm
 what happened.
+
+## Dispatch Summary
+
+The **Scanner** menu also provides a **Dispatch Summary** submenu. Choose one of the preset ranges (Last 5 Days, Last Week or Last Month) to generate a sheet named **Dispatch Summary** with total quantities grouped by product for that period.
+
