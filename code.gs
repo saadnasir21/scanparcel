@@ -8,7 +8,7 @@ function onOpen() {
   SpreadsheetApp.getUi()
     .createMenu('Scanner')
     .addItem('Open Scanner Sidebar', 'openScannerSidebar')
-    .addItem('Reconcile COD Payments', 'openCodUploadDialog')
+    .addItem('Reconcile COD Payments', 'reconcileCODPayments')
     .addSubMenu(SpreadsheetApp.getUi().createMenu('Dispatch Summary')
       .addItem('Last 5 Days', 'showDispatchSummaryLast5')
       .addItem('Last Week', 'showDispatchSummaryWeek')
