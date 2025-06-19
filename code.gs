@@ -8,6 +8,7 @@ function onOpen() {
   SpreadsheetApp.getUi()
     .createMenu('Scanner')
     .addItem('Open Scanner Sidebar', 'openScannerSidebar')
+    .addItem('Reconcile COD Payments', 'reconcileCODPayments')
     .addSubMenu(SpreadsheetApp.getUi().createMenu('Dispatch Summary')
       .addItem('Last 5 Days', 'showDispatchSummaryLast5')
       .addItem('Last Week', 'showDispatchSummaryWeek')
@@ -826,3 +827,56 @@ function updateDispatchSummarySheet(days) {
 function showDispatchSummaryLast5()  { updateDispatchSummarySheet(5); }
 function showDispatchSummaryWeek()   { updateDispatchSummarySheet(7); }
 function showDispatchSummaryMonth()  { updateDispatchSummarySheet(30); }
+
+/**
+ * Reconcile COD payments from invoice data and mark orders.
+ */
+function reconcileCODPayments() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const orderSheet = ss.getSheetByName('Sheet1');
+  const invoiceSheet = ss.getSheetByName('TCS Invoice');
+  if (!orderSheet || !invoiceSheet) return;
+
+  const orderData = orderSheet.getDataRange().getValues();
+  const invoiceData = invoiceSheet.getDataRange().getValues();
+  if (invoiceData.length < 2) return;
+
+  // map invoice headers
+  const invHeaders = invoiceData[0].map(h => String(h).trim().toLowerCase().replace(/\s+/g, ''));
+  const parcelIdx = invHeaders.indexOf('parcelno');
+  const codIdx = invHeaders.indexOf('codamount');
+  const statusIdx = invHeaders.indexOf('status');
+  if (parcelIdx < 0 || codIdx < 0 || statusIdx < 0) return;
+
+  // build lookup of parcel → {status, cod}
+  const invoiceMap = {};
+  for (let i = 1; i < invoiceData.length; i++) {
+    const rawParcel = invoiceData[i][parcelIdx];
+    const cleaned = String(rawParcel).replace(/\s+/g, '').trim();
+    if (!cleaned) continue;
+    invoiceMap[cleaned] = {
+      cod: invoiceData[i][codIdx],
+      status: String(invoiceData[i][statusIdx]).toLowerCase()
+    };
+  }
+
+  const headers = orderData[0];
+  const parcelCol = headers.indexOf('Parcel number');
+  const statusCol = headers.indexOf('Shipping Status');
+  const resultCol = 13; // Column N (0-based)
+
+  for (let r = 1; r < orderData.length; r++) {
+    const shippingStatus = String(orderData[r][statusCol]).toLowerCase();
+    const rawParcel = String(orderData[r][parcelCol] || '').replace(/\s+/g, '').trim();
+    if (shippingStatus === 'dispatched') {
+      let result = 'Dispatched – No COD ❌';
+      const rec = invoiceMap[rawParcel];
+      if (rec && rec.status === 'delivered' && rec.cod && parseFloat(rec.cod) > 0) {
+        result = 'Paid ✅';
+      }
+      orderSheet.getRange(r + 1, resultCol + 1).setValue(result);
+    }
+  }
+
+  SpreadsheetApp.flush();
+}
