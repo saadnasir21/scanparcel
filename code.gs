@@ -838,13 +838,44 @@ function openCodUploadDialog() {
 }
 
 /**
- * Receive uploaded CSV text, store it in TCS Invoice sheet and reconcile.
+ * Receive uploaded invoice file (base64 or blob), store it and reconcile.
  *
- * @param {string} csvText The raw CSV file contents.
+ * @param {string|Blob|Object} fileData Base64 string, blob or {data,name}.
  * @return {string} Confirmation message.
  */
-function uploadCodInvoice(csvText) {
-  var data = Utilities.parseCsv(csvText);
+function uploadCodInvoice(fileData) {
+  var blob;
+  if (fileData instanceof Blob) {
+    blob = fileData;
+  } else if (fileData && typeof fileData === 'object' && fileData.data) {
+    var base = String(fileData.data).replace(/^data:.*;base64,/, '');
+    var type = fileData.type || 'application/octet-stream';
+    blob = Utilities.newBlob(Utilities.base64Decode(base), type, fileData.name || 'upload');
+  } else if (typeof fileData === 'string') {
+    var baseStr = fileData.replace(/^data:.*;base64,/, '');
+    blob = Utilities.newBlob(Utilities.base64Decode(baseStr));
+  } else {
+    throw new Error('Unsupported file');
+  }
+
+  var extMatch = blob.getName().match(/\.([^.]+)$/);
+  var ext = extMatch ? extMatch[1].toLowerCase() : 'csv';
+  var data;
+
+  if (ext === 'csv') {
+    data = Utilities.parseCsv(blob.getDataAsString());
+  } else if (ext === 'xls' || ext === 'xlsx') {
+    var tmp = Drive.Files.insert({title: blob.getName(), mimeType: blob.getContentType()}, blob, {convert: true});
+    try {
+      var tempSs = SpreadsheetApp.openById(tmp.id);
+      data = tempSs.getSheets()[0].getDataRange().getValues();
+    } finally {
+      Drive.Files.remove(tmp.id);
+    }
+  } else {
+    throw new Error('Unsupported file extension: ' + ext);
+  }
+
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var sheet = ss.getSheetByName('TCS Invoice');
   if (!sheet) sheet = ss.insertSheet('TCS Invoice');
