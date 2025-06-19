@@ -12,7 +12,7 @@ cancel orders when parcels are returned.
 3. Copy the contents of `code.gs` and `ScannerSidebar.html` from this repository
    into new files of the same names in the Apps Script project.
 4. Save the project. When you reload the spreadsheet you will see a **Scanner**
-   menu with an item **Open Scanner Sidebar**.
+   menu with items **Open Scanner Sidebar** and **Reconcile COD Payments**.
 
 ## Configuring Shopify credentials
 
@@ -49,8 +49,19 @@ contains a single input box and four buttons:
   cancel it in the sheet and on Shopify.
 - Once cancelled by the customer, an order cannot be dispatched.
 - **Set Custom Status** – choose a status like "Dispatched" or "Returned" and optionally select a date to apply it.
-After each action a short message appears at the bottom of the sidebar to confirm
-what happened.
+  - **Reconcile COD Payments** – cross-checks the `TCS Invoice` sheet and marks dispatched orders as "Paid ✅" or "Dispatched – No COD ❌".
+  After each action a short message appears at the bottom of the sidebar to confirm
+  what happened.
+
+## Importing TCS Invoice Data
+
+Create (or clear) a sheet named `TCS Invoice` in the same spreadsheet. If you
+receive an invoice file with columns such as `CompanyName`, `ParcelNo`,
+`ThirdPartyNo`, `BookingDate`, `Consignee`, `Origin`, `Destination`, `Weight`,
+`CODAmount`, `DeliveryCharges`, `PaymentPeriod`, `Status`, `ItemType` and
+`SpecialInstruction`, open that sheet and choose **File → Import** to upload the
+file. The script reads the `ParcelNo`, `CODAmount` and `Status` headers to match
+each parcel and mark whether payment was received.
 
 ## Dispatch Summary
 
