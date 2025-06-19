@@ -55,13 +55,11 @@ contains a single input box and four buttons:
 
 ## Importing TCS Invoice Data
 
-Create (or clear) a sheet named `TCS Invoice` in the same spreadsheet. If you
-receive an invoice file with columns such as `CompanyName`, `ParcelNo`,
-`ThirdPartyNo`, `BookingDate`, `Consignee`, `Origin`, `Destination`, `Weight`,
-`CODAmount`, `DeliveryCharges`, `PaymentPeriod`, `Status`, `ItemType` and
-`SpecialInstruction`, open that sheet and choose **File → Import** to upload the
-file. The script reads the `ParcelNo`, `CODAmount` and `Status` headers to match
-each parcel and mark whether payment was received.
+Choose **Scanner → Reconcile COD Payments** and upload the invoice CSV when
+prompted. The script will create (or clear) a sheet named `TCS Invoice`, copy the
+file contents there and then cross‑check dispatched orders. It reads the
+`ParcelNo`, `CODAmount` and `Status` headers to mark each parcel in column **N**
+as either "Paid ✅" or "Dispatched – No COD ❌".
 
 ## Dispatch Summary
 

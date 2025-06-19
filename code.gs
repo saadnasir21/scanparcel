@@ -8,7 +8,7 @@ function onOpen() {
   SpreadsheetApp.getUi()
     .createMenu('Scanner')
     .addItem('Open Scanner Sidebar', 'openScannerSidebar')
-    .addItem('Reconcile COD Payments', 'reconcileCODPayments')
+    .addItem('Reconcile COD Payments', 'openCodUploadDialog')
     .addSubMenu(SpreadsheetApp.getUi().createMenu('Dispatch Summary')
       .addItem('Last 5 Days', 'showDispatchSummaryLast5')
       .addItem('Last Week', 'showDispatchSummaryWeek')
@@ -827,6 +827,32 @@ function updateDispatchSummarySheet(days) {
 function showDispatchSummaryLast5()  { updateDispatchSummarySheet(5); }
 function showDispatchSummaryWeek()   { updateDispatchSummarySheet(7); }
 function showDispatchSummaryMonth()  { updateDispatchSummarySheet(30); }
+
+/**
+ * Show a dialog to upload the COD invoice CSV.
+ */
+function openCodUploadDialog() {
+  var html = HtmlService.createHtmlOutputFromFile('CodUploadDialog')
+    .setWidth(300).setHeight(150);
+  SpreadsheetApp.getUi().showModalDialog(html, 'Upload COD Invoice');
+}
+
+/**
+ * Receive uploaded CSV text, store it in TCS Invoice sheet and reconcile.
+ *
+ * @param {string} csvText The raw CSV file contents.
+ * @return {string} Confirmation message.
+ */
+function uploadCodInvoice(csvText) {
+  var data = Utilities.parseCsv(csvText);
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName('TCS Invoice');
+  if (!sheet) sheet = ss.insertSheet('TCS Invoice');
+  sheet.clearContents();
+  sheet.getRange(1, 1, data.length, data[0].length).setValues(data);
+  reconcileCODPayments();
+  return 'Invoice uploaded and reconciled.';
+}
 
 /**
  * Reconcile COD payments from invoice data and mark orders.

@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <base target="_top">
+    <style>
+      body { font-family:sans-serif; padding:20px; }
+      #msg { margin-top:10px; }
+    </style>
+    <script>
+      function uploadFile() {
+        var inp = document.getElementById('codFile');
+        var file = inp.files[0];
+        if (!file) { document.getElementById('msg').textContent='Please choose a file.'; return; }
+        var reader = new FileReader();
+        reader.onload = function(e) {
+          var text = e.target.result;
+          google.script.run.withSuccessHandler(function(res){
+            document.getElementById('msg').textContent = res;
+            google.script.host.close();
+          }).uploadCodInvoice(text);
+        };
+        reader.readAsText(file);
+      }
+    </script>
+  </head>
+  <body>
+    <input type="file" id="codFile" accept=".csv" />
+    <button onclick="uploadFile()">Upload</button>
+    <div id="msg"></div>
+  </body>
+</html>
