@@ -56,10 +56,12 @@ contains a single input box and four buttons:
 ## Importing TCS Invoice Data
 
 Choose **Scanner → Reconcile COD Payments** and upload the invoice CSV when
-prompted. The script will create (or clear) a sheet named `TCS Invoice`, copy the
-file contents there and then cross‑check dispatched orders. It reads the
-`ParcelNo`, `CODAmount` and `Status` headers to mark each parcel in column **N**
-as either "Paid ✅" or "Dispatched – No COD ❌".
+prompted. The script copies the file to a sheet named `TCS Invoice`. If the
+sheet already contains a header row, the new file's header is skipped and only
+the remaining rows are appended. Otherwise the sheet is created (or emptied) and
+all rows are inserted. It then cross‑checks dispatched orders. It reads the
+`ParcelNo`, `CODAmount` and `Status` headers to mark each parcel in column
+**N** as either "Paid ✅" or "Dispatched – No COD ❌".
 
 ## Dispatch Summary
 
