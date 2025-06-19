@@ -879,8 +879,16 @@ function uploadCodInvoice(fileData) {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var sheet = ss.getSheetByName('TCS Invoice');
   if (!sheet) sheet = ss.insertSheet('TCS Invoice');
-  sheet.clearContents();
-  sheet.getRange(1, 1, data.length, data[0].length).setValues(data);
+
+  var hasHeader = sheet.getLastRow() > 0;
+  if (hasHeader) {
+    if (data.length > 1) {
+      sheet.getRange(sheet.getLastRow() + 1, 1, data.length - 1, data[0].length)
+           .setValues(data.slice(1));
+    }
+  } else {
+    sheet.getRange(1, 1, data.length, data[0].length).setValues(data);
+  }
   reconcileCODPayments();
   return 'Invoice uploaded and reconciled.';
 }
