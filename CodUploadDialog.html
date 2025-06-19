@@ -13,18 +13,20 @@
         if (!file) { document.getElementById('msg').textContent='Please choose a file.'; return; }
         var reader = new FileReader();
         reader.onload = function(e) {
-          var text = e.target.result;
           google.script.run.withSuccessHandler(function(res){
             document.getElementById('msg').textContent = res;
             google.script.host.close();
-          }).uploadCodInvoice(text);
+          }).uploadCodInvoice({
+            data: e.target.result,
+            name: file.name
+          });
         };
-        reader.readAsText(file);
+        reader.readAsDataURL(file);
       }
     </script>
   </head>
   <body>
-    <input type="file" id="codFile" accept=".csv" />
+    <input type="file" id="codFile" accept=".csv,.xls,.xlsx" />
     <button onclick="uploadFile()">Upload</button>
     <div id="msg"></div>
   </body>
