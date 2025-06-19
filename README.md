@@ -56,3 +56,4 @@ what happened.
 
 The **Scanner** menu also provides a **Dispatch Summary** submenu. Choose one of the preset ranges (Last 5 Days, Last Week or Last Month) to generate a sheet named **Dispatch Summary** with total quantities grouped by product for that period.
 
+You can also choose **Custom Range** to open a sidebar with start and end date pickers and quick options for the last 7 days, the current month or last month.

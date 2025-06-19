@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <base target="_top">
+    <style>
+      #msg { margin-top:8px; font-weight:bold; }
+      button { margin-right:4px; }
+    </style>
+    <script>
+      function iso(d){ return d.toISOString().substr(0,10); }
+      function setLast7(){
+        var now=new Date();
+        document.getElementById('end').value=iso(now);
+        document.getElementById('start').value=iso(new Date(now.getTime()-6*86400000));
+      }
+      function setThisMonth(){
+        var now=new Date();
+        document.getElementById('start').value=iso(new Date(now.getFullYear(),now.getMonth(),1));
+        document.getElementById('end').value=iso(now);
+      }
+      function setLastMonth(){
+        var now=new Date();
+        var start=new Date(now.getFullYear(),now.getMonth()-1,1);
+        var end=new Date(now.getFullYear(),now.getMonth(),0);
+        document.getElementById('start').value=iso(start);
+        document.getElementById('end').value=iso(end);
+      }
+      function generate(){
+        var s=document.getElementById('start').value;
+        var e=document.getElementById('end').value;
+        if(!s||!e) return;
+        google.script.run.withSuccessHandler(function(res){
+          var m=document.getElementById('msg');
+          m.textContent=res==='Updated'? 'Summary updated' : res;
+          setTimeout(function(){m.textContent='';},1500);
+        }).updateDispatchSummaryRange(s,e);
+      }
+      document.addEventListener('DOMContentLoaded', setLast7);
+    </script>
+  </head>
+  <body>
+    <div>
+      <input type="date" id="start">
+      <input type="date" id="end">
+    </div>
+    <div>
+      <button onclick="setLast7()">Last 7 Days</button>
+      <button onclick="setThisMonth()">This Month</button>
+      <button onclick="setLastMonth()">Last Month</button>
+      <button onclick="generate()">Generate</button>
+    </div>
+    <div id="msg"></div>
+  </body>
+</html>

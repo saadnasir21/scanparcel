@@ -11,9 +11,9 @@ function onOpen() {
     .addSubMenu(SpreadsheetApp.getUi().createMenu('Dispatch Summary')
       .addItem('Last 5 Days', 'showDispatchSummaryLast5')
       .addItem('Last Week', 'showDispatchSummaryWeek')
-      .addItem('Last Month', 'showDispatchSummaryMonth'))
+      .addItem('Last Month', 'showDispatchSummaryMonth')
+      .addItem('Custom Range…', 'openDispatchSummarySidebar'))
     .addToUi();
-}
 
 /**
  * Show the sidebar.
@@ -826,3 +826,46 @@ function updateDispatchSummarySheet(days) {
 function showDispatchSummaryLast5()  { updateDispatchSummarySheet(5); }
 function showDispatchSummaryWeek()   { updateDispatchSummarySheet(7); }
 function showDispatchSummaryMonth()  { updateDispatchSummarySheet(30); }
+
+/**
+ * Generate a dispatch summary between two specific dates.
+ * @param {string} start ISO string YYYY-MM-DD of first day.
+ * @param {string} end ISO string YYYY-MM-DD of last day.
+ */
+function updateDispatchSummaryRange(start, end) {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var source = ss.getSheetByName('Product wise daily dispatch');
+  if (!source) return 'MissingSheet';
+  var out = ss.getSheetByName('Dispatch Summary');
+  if (!out) out = ss.insertSheet('Dispatch Summary');
+  out.clearContents();
+  out.appendRow(['Product name', 'Quantity']);
+
+  var startDate = new Date(start);
+  var endDate = new Date(end);
+  startDate.setHours(0,0,0,0);
+  endDate.setHours(23,59,59,999);
+
+  var rows = source.getDataRange().getValues();
+  var totals = {};
+  for (var i=1; i<rows.length; i++) {
+    var d = rows[i][0];
+    var prod = rows[i][1];
+    var qty = Number(rows[i][2]||0);
+    if (!(d instanceof Date)) d = new Date(d);
+    if (d >= startDate && d <= endDate) {
+      totals[prod] = (totals[prod]||0) + qty;
+    }
+  }
+  var keys = Object.keys(totals).sort();
+  for (var j=0; j<keys.length; j++) {
+    out.appendRow([keys[j], totals[keys[j]]]);
+  }
+  return 'Updated';
+}
+
+function openDispatchSummarySidebar() {
+  var html = HtmlService.createHtmlOutputFromFile('DispatchSummarySidebar')
+    .setTitle('Dispatch Summary');
+  SpreadsheetApp.getUi().showSidebar(html);
+}
