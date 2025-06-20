@@ -933,13 +933,17 @@ function reconcileCODPayments() {
   for (let r = 1; r < orderData.length; r++) {
     const shippingStatus = String(orderData[r][statusCol]).toLowerCase();
     const rawParcel = String(orderData[r][parcelCol] || '').replace(/\s+/g, '').trim();
+    const rec = invoiceMap[rawParcel];
+    const statusCell = orderSheet.getRange(r + 1, statusCol + 1);
     if (shippingStatus === 'dispatched') {
       let result = 'Dispatched – No COD ❌';
-      const rec = invoiceMap[rawParcel];
       if (rec && rec.status === 'delivered' && rec.cod && parseFloat(rec.cod) > 0) {
         result = 'Paid ✅';
       }
       orderSheet.getRange(r + 1, resultCol + 1).setValue(result);
+    } else if (!shippingStatus && rec && rec.status === 'delivered' && rec.cod && parseFloat(rec.cod) > 0) {
+      statusCell.setValue('Delivered');
+      orderSheet.getRange(r + 1, resultCol + 1).setValue('Paid ✅');
     }
   }
 
