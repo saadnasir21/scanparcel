@@ -913,7 +913,7 @@ function reconcileCODPayments() {
   const statusIdx = invHeaders.indexOf('status');
   if (parcelIdx < 0 || codIdx < 0 || statusIdx < 0) return;
 
-  // build lookup of parcel → {status, cod}
+  // build lookup of parcel → {status, cod, row}
   const invoiceMap = {};
   for (let i = 1; i < invoiceData.length; i++) {
     const rawParcel = invoiceData[i][parcelIdx];
@@ -921,11 +921,13 @@ function reconcileCODPayments() {
     if (!cleaned) continue;
     invoiceMap[cleaned] = {
       cod: invoiceData[i][codIdx],
-      status: String(invoiceData[i][statusIdx]).toLowerCase()
+      status: String(invoiceData[i][statusIdx]).toLowerCase(),
+      row: i
     };
   }
 
   const matchedParcels = new Set();
+  const paidRows = new Set();
 
   const headers = orderData[0];
   const parcelCol = headers.indexOf('Parcel number');
@@ -944,21 +946,24 @@ function reconcileCODPayments() {
     if (currentResult === 'Paid ✅' && deliveryCell) {
       const currentDelivery = String(orderData[r][deliveryCol] || '').toLowerCase();
       if (currentDelivery !== 'delivered') deliveryCell.setValue('Delivered');
+      if (rec) paidRows.add(rec.row);
     }
     if (shippingStatus === 'dispatched') {
       let result = 'Dispatched – No COD ❌';
       if (rec && rec.status === 'delivered' && rec.cod && parseFloat(rec.cod) > 0) {
         result = 'Paid ✅';
         if (deliveryCell) deliveryCell.setValue('Delivered');
+        paidRows.add(rec.row);
       }
       orderSheet.getRange(r + 1, resultCol + 1).setValue(result);
     } else if (!shippingStatus && rec && rec.status === 'delivered' && rec.cod && parseFloat(rec.cod) > 0) {
       if (deliveryCell) deliveryCell.setValue('Delivered');
       orderSheet.getRange(r + 1, resultCol + 1).setValue('Paid ✅');
+      paidRows.add(rec.row);
     }
   }
 
-  // highlight invoice rows that were not matched
+  // highlight invoice rows that were not matched or were paid
   const lastCol = invoiceSheet.getLastColumn();
   if (invoiceData.length > 1) {
     invoiceSheet.getRange(2, 1, invoiceData.length - 1, lastCol).setBackground(null);
@@ -967,6 +972,8 @@ function reconcileCODPayments() {
       const status = String(invoiceData[i][statusIdx]).toLowerCase();
       if (status === 'delivered' && !matchedParcels.has(cleaned)) {
         invoiceSheet.getRange(i + 1, 1, 1, lastCol).setBackground('#fff2cc');
+      } else if (paidRows.has(i)) {
+        invoiceSheet.getRange(i + 1, 1, 1, lastCol).setBackground('#ccffcc');
       }
     }
   }

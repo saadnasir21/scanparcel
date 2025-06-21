@@ -61,6 +61,8 @@ should contain the headers `ParcelNo`, `CODAmount` and `Status`. Then choose
 The script marks each parcel in column **N** as either "Paid ✅" or
 "Dispatched – No COD ❌". Delivered parcels listed in `TCS Invoice` that are
 missing from `Sheet1` are highlighted in yellow so you can easily spot them.
+Invoice rows that correspond to orders marked **Paid ✅** are highlighted in
+light green.
 
 ## Dispatch Summary
 
