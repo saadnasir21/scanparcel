@@ -929,21 +929,28 @@ function reconcileCODPayments() {
   const parcelCol = headers.indexOf('Parcel number');
   let statusCol = headers.indexOf('Shipping Status');
   if (statusCol < 0) statusCol = headers.indexOf('Status');
+  const deliveryCol = headers.indexOf('Delivery Status');
   const resultCol = 13; // Column N (0-based)
 
   for (let r = 1; r < orderData.length; r++) {
     const shippingStatus = statusCol >= 0 ? String(orderData[r][statusCol]).toLowerCase() : '';
     const rawParcel = String(orderData[r][parcelCol] || '').replace(/\s+/g, '').trim();
     const rec = invoiceMap[rawParcel];
-    const statusCell = statusCol >= 0 ? orderSheet.getRange(r + 1, statusCol + 1) : null;
+    const deliveryCell = deliveryCol >= 0 ? orderSheet.getRange(r + 1, deliveryCol + 1) : null;
+    const currentResult = String(orderData[r][resultCol] || '').trim();
+    if (currentResult === 'Paid ✅' && deliveryCell) {
+      const currentDelivery = String(orderData[r][deliveryCol] || '').toLowerCase();
+      if (currentDelivery !== 'delivered') deliveryCell.setValue('Delivered');
+    }
     if (shippingStatus === 'dispatched') {
       let result = 'Dispatched – No COD ❌';
       if (rec && rec.status === 'delivered' && rec.cod && parseFloat(rec.cod) > 0) {
         result = 'Paid ✅';
+        if (deliveryCell) deliveryCell.setValue('Delivered');
       }
       orderSheet.getRange(r + 1, resultCol + 1).setValue(result);
     } else if (!shippingStatus && rec && rec.status === 'delivered' && rec.cod && parseFloat(rec.cod) > 0) {
-      if (statusCell) statusCell.setValue('Delivered');
+      if (deliveryCell) deliveryCell.setValue('Delivered');
       orderSheet.getRange(r + 1, resultCol + 1).setValue('Paid ✅');
     }
   }
