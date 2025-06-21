@@ -59,7 +59,8 @@ Copy or import your invoice rows into the `TCS Invoice` sheet. The first row
 should contain the headers `ParcelNo`, `CODAmount` and `Status`. Then choose
 **Scanner → Reconcile COD Payments** to cross‑check dispatched orders.
 The script marks each parcel in column **N** as either "Paid ✅" or
-"Dispatched – No COD ❌".
+"Dispatched – No COD ❌". Delivered parcels listed in `TCS Invoice` that are
+missing from `Sheet1` are highlighted in yellow so you can easily spot them.
 
 ## Dispatch Summary
 
