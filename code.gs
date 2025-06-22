@@ -911,6 +911,7 @@ function reconcileCODPayments() {
   const parcelIdx = invHeaders.indexOf('parcelno');
   const codIdx = invHeaders.indexOf('codamount');
   const statusIdx = invHeaders.indexOf('status');
+  const specialIdx = invHeaders.indexOf('specialinstruction');
   if (parcelIdx < 0 || codIdx < 0 || statusIdx < 0) return;
 
   // build lookup of parcel → {status, cod, row}
@@ -934,7 +935,17 @@ function reconcileCODPayments() {
   let statusCol = headers.indexOf('Shipping Status');
   if (statusCol < 0) statusCol = headers.indexOf('Status');
   const deliveryCol = headers.indexOf('Delivery Status');
+  const orderCol = headers.indexOf('Order Number');
+  const amountCol = headers.indexOf('Amount');
   const resultCol = 13; // Column N (0-based)
+
+  const orderMap = {};
+  if (orderCol >= 0) {
+    for (let r = 1; r < orderData.length; r++) {
+      const num = String(orderData[r][orderCol] || '').trim().replace(/^#/, '');
+      if (num) orderMap[num] = r;
+    }
+  }
 
   for (let r = 1; r < orderData.length; r++) {
     const shippingStatus = statusCol >= 0 ? String(orderData[r][statusCol]).toLowerCase() : '';
@@ -960,6 +971,31 @@ function reconcileCODPayments() {
       if (deliveryCell) deliveryCell.setValue('Delivered');
       orderSheet.getRange(r + 1, resultCol + 1).setValue('Paid ✅');
       paidRows.add(rec.row);
+    }
+  }
+
+  // handle delivered parcels with 0 COD linked by order number
+  if (specialIdx >= 0 && orderCol >= 0 && amountCol >= 0) {
+    for (let i = 1; i < invoiceData.length; i++) {
+      const status = String(invoiceData[i][statusIdx]).toLowerCase();
+      const codVal = invoiceData[i][codIdx];
+      if (status === 'delivered' && (!codVal || parseFloat(codVal) === 0)) {
+        const instr = String(invoiceData[i][specialIdx] || '');
+        const match = instr.match(/(\d+)/);
+        if (match) {
+          const num = match[1];
+          const row = orderMap[num];
+          if (row !== undefined) {
+            const amount = orderData[row][amountCol];
+            if (!amount || parseFloat(amount) === 0) {
+              if (deliveryCol >= 0) orderSheet.getRange(row + 1, deliveryCol + 1).setValue('Delivered');
+              orderSheet.getRange(row + 1, resultCol + 1).setValue('Paid \u2013 Bank Transfer \u2705');
+              matchedParcels.add(String(invoiceData[i][parcelIdx]).replace(/\s+/g, '').trim());
+              paidRows.add(i);
+            }
+          }
+        }
+      }
     }
   }
 
