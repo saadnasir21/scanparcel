@@ -12,7 +12,8 @@ function onOpen() {
     .addSubMenu(SpreadsheetApp.getUi().createMenu('Dispatch Summary')
       .addItem('Last 5 Days', 'showDispatchSummaryLast5')
       .addItem('Last Week', 'showDispatchSummaryWeek')
-      .addItem('Last Month', 'showDispatchSummaryMonth'))
+      .addItem('Last Month', 'showDispatchSummaryMonth')
+      .addItem('Custom Range…', 'showDispatchSummaryCustom'))
     .addToUi();
 }
 
@@ -1052,6 +1053,46 @@ function updateDispatchSummarySheet(days) {
 function showDispatchSummaryLast5()  { updateDispatchSummarySheet(5); }
 function showDispatchSummaryWeek()   { updateDispatchSummarySheet(7); }
 function showDispatchSummaryMonth()  { updateDispatchSummarySheet(30); }
+
+function updateDispatchSummaryRange(start, end) {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var source = ss.getSheetByName('Product wise daily dispatch');
+  if (!source) return 'MissingSheet';
+  var out = ss.getSheetByName('Dispatch Summary');
+  if (!out) out = ss.insertSheet('Dispatch Summary');
+  out.clearContents();
+  out.appendRow(['Product name', 'Quantity']);
+
+  var startDate = new Date(start); startDate.setHours(0,0,0,0);
+  var endDate   = new Date(end);   endDate.setHours(0,0,0,0);
+
+  var rows = source.getDataRange().getValues();
+  var totals = {};
+  for (var i=1; i<rows.length; i++) {
+    var d = rows[i][0];
+    var prod = rows[i][1];
+    var qty = Number(rows[i][2]||0);
+    if (!(d instanceof Date)) d = new Date(d);
+    if (d >= startDate && d <= endDate) {
+      totals[prod] = (totals[prod]||0) + qty;
+    }
+  }
+  var keys = Object.keys(totals).sort();
+  for (var j=0; j<keys.length; j++) {
+    out.appendRow([keys[j], totals[keys[j]]]);
+  }
+  return 'Updated';
+}
+
+function showDispatchSummaryCustom() {
+  var html = HtmlService.createHtmlOutputFromFile('DispatchSummaryDialog')
+    .setWidth(300).setHeight(150);
+  SpreadsheetApp.getUi().showModalDialog(html, 'Dispatch Summary Range');
+}
+
+function createDispatchSummaryCustom(start, end) {
+  return updateDispatchSummaryRange(start, end);
+}
 
 /**
  * Show a dialog to upload the COD invoice CSV.
