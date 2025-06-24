@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <base target="_top">
+    <style>
+      body { font-family:sans-serif; padding:20px; }
+      #msg { margin-top:10px; }
+    </style>
+    <script>
+      function generate() {
+        var start = document.getElementById('startDate').value;
+        var end = document.getElementById('endDate').value;
+        if (!start || !end) return;
+        google.script.run.withSuccessHandler(function(res){
+          document.getElementById('msg').textContent = res;
+          google.script.host.close();
+        }).createDispatchSummaryCustom(start, end);
+      }
+      document.addEventListener('DOMContentLoaded', function(){
+        var today = new Date();
+        var start = new Date(today.getTime() - 7*24*60*60*1000);
+        document.getElementById('startDate').value = start.toISOString().substr(0,10);
+        document.getElementById('endDate').value = today.toISOString().substr(0,10);
+      });
+    </script>
+  </head>
+  <body>
+    <label>Start date: <input type="date" id="startDate"></label><br>
+    <label>End date: <input type="date" id="endDate"></label><br>
+    <button onclick="generate()">Generate</button>
+    <div id="msg"></div>
+  </body>
+</html>
