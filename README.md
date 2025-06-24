@@ -68,3 +68,7 @@ light green.
 
 The **Scanner** menu also provides a **Dispatch Summary** submenu. Choose one of the preset ranges (Last 5 Days, Last Week or Last Month) to generate a sheet named **Dispatch Summary** with total quantities grouped by product for that period.
 
+## Local Rider Orders
+
+When the shipping status is set to **Dispatch through Local Rider**, the script now records each order ID and amount in a sheet named **Local Rider Orders**. This sheet lists every local rider dispatch on a daily basis so you can easily reconcile cash payments collected by riders.
+
