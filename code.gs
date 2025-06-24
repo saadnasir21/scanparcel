@@ -59,6 +59,7 @@ function onEdit(e) {
   var productCol = head.indexOf('Product name') + 1;
   var qtyCol     = head.indexOf('Quantity') + 1;
   var amountCol  = head.indexOf('Amount') + 1;
+  var orderCol   = head.indexOf('Order Number') + 1;
 
   if (!statusCol || !dateCol) return;
   if (range.getColumn() !== statusCol || range.getRow() === 1) return;
@@ -86,7 +87,7 @@ function onEdit(e) {
     } else if (oldStatus === 'Returned') {
       reverseReturnSummaries(products, quantities, orderAmt, oldDateObj || todayMid);
     } else if (oldStatus === 'Dispatch through Local Rider') {
-      reverseDispatchInventoryOnly(products, quantities, orderAmt, oldDateObj || todayMid);
+      reverseDispatchInventoryOnly(products, quantities, orderAmt, oldDateObj || todayMid, rowData[orderCol - 1]);
     }
   }
 
@@ -101,7 +102,7 @@ function onEdit(e) {
   reverseOld();
   if (statusLower === 'dispatch through local rider') {
     dateCell.setValue(todayMid);
-    updateDispatchInventoryOnly(products, quantities, orderAmt, todayMid);
+    updateDispatchInventoryOnly(products, quantities, orderAmt, todayMid, rowData[orderCol - 1]);
   } else if (statusLower === 'dispatch through bykea' || statusLower === 'dispatched') {
     dateCell.setValue(todayMid);
     updateDispatchSummaries(products, quantities, orderAmt, todayMid);
@@ -546,7 +547,7 @@ function reverseDispatchSummaries(products, quantities, amount, dateObj) {
 /**
  * Add dispatched quantities to inventory only (no parcel summary).
  */
-function updateDispatchInventoryOnly(products, quantities, amount, dateObj) {
+function updateDispatchInventoryOnly(products, quantities, amount, dateObj, orderNum) {
   var ss     = SpreadsheetApp.getActiveSpreadsheet(),
       prodSh = ss.getSheetByName('Product wise daily dispatch'),
       today  = new Date(dateObj.getFullYear(), dateObj.getMonth(), dateObj.getDate());
@@ -567,12 +568,13 @@ function updateDispatchInventoryOnly(products, quantities, amount, dateObj) {
       if (!found) prodSh.appendRow([today, name, qty]);
     }
   }
+  if (orderNum) recordLocalRiderOrder(orderNum, amount, today);
 }
 
 /**
  * Reverse inventory-only dispatch quantities.
  */
-function reverseDispatchInventoryOnly(products, quantities, amount, dateObj) {
+function reverseDispatchInventoryOnly(products, quantities, amount, dateObj, orderNum) {
   var ss     = SpreadsheetApp.getActiveSpreadsheet(),
       prodSh = ss.getSheetByName('Product wise daily dispatch'),
       target = new Date(dateObj.getFullYear(), dateObj.getMonth(), dateObj.getDate());
@@ -593,6 +595,36 @@ function reverseDispatchInventoryOnly(products, quantities, amount, dateObj) {
           }
         }
       }
+    }
+  }
+  if (orderNum) removeLocalRiderOrder(orderNum, target);
+}
+
+/**
+ * Record an order dispatched through local rider.
+ * Appends a row to the "Local Rider Orders" sheet with date, order ID and amount.
+ */
+function recordLocalRiderOrder(orderNum, amount, dateObj) {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName('Local Rider Orders');
+  if (!sheet) sheet = ss.insertSheet('Local Rider Orders');
+  var day = new Date(dateObj.getFullYear(), dateObj.getMonth(), dateObj.getDate());
+  sheet.appendRow([day, orderNum, amount]);
+}
+
+/**
+ * Remove a previously recorded local rider order entry.
+ */
+function removeLocalRiderOrder(orderNum, dateObj) {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName('Local Rider Orders');
+  if (!sheet) return;
+  var rows = sheet.getDataRange().getValues();
+  for (var r = 1; r < rows.length; r++) {
+    var d = rows[r][0] instanceof Date ? rows[r][0] : new Date(rows[r][0]);
+    if (d.toDateString() === dateObj.toDateString() && String(rows[r][1]).trim() === String(orderNum).trim()) {
+      sheet.deleteRow(r + 1);
+      break;
     }
   }
 }
@@ -920,6 +952,7 @@ function manualSetStatus(parcelRaw, newStatus, dateStr) {
   var productCol = head.indexOf("Product name") + 1;
   var qtyCol     = head.indexOf("Quantity") + 1;
   var amountCol  = head.indexOf("Amount") + 1;
+  var orderCol   = head.indexOf("Order Number") + 1;
 
   if (!parcelCol || !statusCol || !dateCol) return 'MissingHeaders';
 
@@ -937,6 +970,7 @@ function manualSetStatus(parcelRaw, newStatus, dateStr) {
   var rowData   = data[foundRow - 1];
   var oldStatus = rowData[statusCol - 1];
   var oldDate   = rowData[dateCol - 1];
+  var orderNum  = orderCol ? rowData[orderCol - 1] : '';
 
   if (String(oldStatus).trim() === 'Cancelled by Customer' && newStatus === 'Dispatched') {
     return 'WasCancelled';
@@ -957,6 +991,8 @@ function manualSetStatus(parcelRaw, newStatus, dateStr) {
       reverseDispatchSummaries(products, quantities, orderAmt, oldDateObj);
     } else if (oldStatus === 'Returned') {
       reverseReturnSummaries(products, quantities, orderAmt, oldDateObj);
+    } else if (oldStatus === 'Dispatch through Local Rider') {
+      reverseDispatchInventoryOnly(products, quantities, orderAmt, oldDateObj, orderNum);
     }
   }
 
@@ -965,8 +1001,10 @@ function manualSetStatus(parcelRaw, newStatus, dateStr) {
   sheet.getRange(foundRow, dateCol).setValue(dateObj);
 
   // add new summary data if needed
-  if (newStatus === 'Dispatched') {
+  if (newStatus === 'Dispatched' || newStatus === 'Dispatch through Bykea') {
     updateDispatchSummaries(products, quantities, orderAmt, dateObj);
+  } else if (newStatus === 'Dispatch through Local Rider') {
+    updateDispatchInventoryOnly(products, quantities, orderAmt, dateObj, orderNum);
   } else if (newStatus === 'Returned') {
     updateReturnSummaries(products, quantities, orderAmt, dateObj);
   }
