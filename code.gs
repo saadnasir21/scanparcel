@@ -37,6 +37,85 @@ function highlightRow(sheet, row) {
 }
 
 /**
+ * Automatically handle manual edits to the Shipping Status column.
+ * Adds or reverses inventory adjustments and sets dispatch dates.
+ * Supported statuses:
+ *   - "Dispatch through Local Rider" → adjust inventory only
+ *   - "Dispatch through Bykea"      → normal dispatch summary
+ *   - "Returned"                    → return adjustment
+ * Clearing the status will reverse the previous adjustment.
+ *
+ * @param {GoogleAppsScript.Events.SheetsOnEdit} e The edit event.
+ */
+function onEdit(e) {
+  var range = e.range;
+  if (!range) return;
+  var sheet = range.getSheet();
+  if (!sheet || sheet.getName() !== 'Sheet1') return;
+
+  var head = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+  var statusCol  = head.indexOf('Shipping Status') + 1;
+  var dateCol    = head.indexOf('Dispatch Date') + 1;
+  var productCol = head.indexOf('Product name') + 1;
+  var qtyCol     = head.indexOf('Quantity') + 1;
+  var amountCol  = head.indexOf('Amount') + 1;
+
+  if (!statusCol || !dateCol) return;
+  if (range.getColumn() !== statusCol || range.getRow() === 1) return;
+  if (range.getNumRows() > 1 || range.getNumColumns() > 1) return;
+
+  var newStatus = String(range.getValue() || '').trim();
+  var oldStatus = e.oldValue ? String(e.oldValue).trim() : '';
+  var row = range.getRow();
+  var dateCell = sheet.getRange(row, dateCol);
+  var dateVal = dateCell.getValue();
+  var oldDateObj = dateVal instanceof Date ? dateVal : (dateVal ? new Date(dateVal) : null);
+  var rowData = sheet.getRange(row, 1, 1, sheet.getLastColumn()).getValues()[0];
+
+  var products   = productCol ? String(rowData[productCol - 1]).split('\n').map(function(s){return s.trim();}).filter(Boolean) : [];
+  var quantities = qtyCol ? String(rowData[qtyCol - 1]).split('\n').map(function(s){return s.trim();}).filter(Boolean) : [];
+  var orderAmt   = amountCol ? Number(rowData[amountCol - 1] || 0) : 0;
+
+  var todayMid = new Date();
+  todayMid.setHours(0, 0, 0, 0);
+
+  function reverseOld() {
+    if (!oldStatus) return;
+    if (oldStatus === 'Dispatched' || oldStatus === 'Dispatch through Bykea') {
+      reverseDispatchSummaries(products, quantities, orderAmt, oldDateObj || todayMid);
+    } else if (oldStatus === 'Returned') {
+      reverseReturnSummaries(products, quantities, orderAmt, oldDateObj || todayMid);
+    } else if (oldStatus === 'Dispatch through Local Rider') {
+      reverseDispatchInventoryOnly(products, quantities, orderAmt, oldDateObj || todayMid);
+    }
+  }
+
+  var statusLower = newStatus.toLowerCase();
+
+  if (!newStatus) {
+    reverseOld();
+    dateCell.clearContent();
+    return;
+  }
+
+  reverseOld();
+  if (statusLower === 'dispatch through local rider') {
+    dateCell.setValue(todayMid);
+    updateDispatchInventoryOnly(products, quantities, orderAmt, todayMid);
+  } else if (statusLower === 'dispatch through bykea' || statusLower === 'dispatched') {
+    dateCell.setValue(todayMid);
+    updateDispatchSummaries(products, quantities, orderAmt, todayMid);
+  } else if (statusLower === 'returned') {
+    dateCell.setValue(todayMid);
+    if (oldStatus === 'Dispatch through Local Rider') {
+      updateReturnInventoryOnly(products, quantities, orderAmt, todayMid);
+    } else {
+      updateReturnSummaries(products, quantities, orderAmt, todayMid);
+    }
+  }
+}
+
+/**
  * First-time scan handler: marks Dispatched or signals confirmReturn.
  */
 function processParcelScan(scannedValue) {
@@ -462,6 +541,114 @@ function reverseDispatchSummaries(products, quantities, amount, dateObj) {
     }
   }
   return false;
+}
+
+/**
+ * Add dispatched quantities to inventory only (no parcel summary).
+ */
+function updateDispatchInventoryOnly(products, quantities, amount, dateObj) {
+  var ss     = SpreadsheetApp.getActiveSpreadsheet(),
+      prodSh = ss.getSheetByName('Product wise daily dispatch'),
+      today  = new Date(dateObj.getFullYear(), dateObj.getMonth(), dateObj.getDate());
+  if (prodSh) {
+    var data = prodSh.getDataRange().getValues();
+    for (var i = 0; i < products.length; i++) {
+      var name = products[i], qty = Number(quantities[i] || 0);
+      var found = false;
+      for (var r = 1; r < data.length; r++) {
+        var rowDate = data[r][0];
+        if (!(rowDate instanceof Date)) rowDate = new Date(rowDate);
+        if (rowDate.toDateString() === today.toDateString() && data[r][1] === name) {
+          prodSh.getRange(r + 1, 3).setValue(Number(data[r][2] || 0) + qty);
+          found = true;
+          break;
+        }
+      }
+      if (!found) prodSh.appendRow([today, name, qty]);
+    }
+  }
+}
+
+/**
+ * Reverse inventory-only dispatch quantities.
+ */
+function reverseDispatchInventoryOnly(products, quantities, amount, dateObj) {
+  var ss     = SpreadsheetApp.getActiveSpreadsheet(),
+      prodSh = ss.getSheetByName('Product wise daily dispatch'),
+      target = new Date(dateObj.getFullYear(), dateObj.getMonth(), dateObj.getDate());
+  if (prodSh) {
+    var rows = prodSh.getDataRange().getValues();
+    for (var r = 1; r < rows.length; r++) {
+      var cellDate = rows[r][0] instanceof Date ? rows[r][0] : new Date(rows[r][0]);
+      if (cellDate.toDateString() === target.toDateString()) {
+        for (var i = 0; i < products.length; i++) {
+          if (rows[r][1] === products[i]) {
+            var newQty = Number(rows[r][2] || 0) - Number(quantities[i] || 0);
+            if (newQty > 0) {
+              prodSh.getRange(r + 1, 3).setValue(newQty);
+            } else {
+              prodSh.deleteRow(r + 1);
+              r--;
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
+/**
+ * Add returned quantities back to inventory only.
+ */
+function updateReturnInventoryOnly(products, quantities, amount, dateObj) {
+  var ss     = SpreadsheetApp.getActiveSpreadsheet(),
+      prodSh = ss.getSheetByName('Product wise daily return'),
+      today  = new Date(dateObj.getFullYear(), dateObj.getMonth(), dateObj.getDate());
+  if (prodSh) {
+    var data = prodSh.getDataRange().getValues();
+    for (var i = 0; i < products.length; i++) {
+      var name = products[i], qty = Number(quantities[i] || 0);
+      var found = false;
+      for (var r = 1; r < data.length; r++) {
+        var rowDate = data[r][0];
+        if (!(rowDate instanceof Date)) rowDate = new Date(rowDate);
+        if (rowDate.toDateString() === today.toDateString() && data[r][1] === name) {
+          prodSh.getRange(r + 1, 3).setValue(Number(data[r][2] || 0) + qty);
+          found = true;
+          break;
+        }
+      }
+      if (!found) prodSh.appendRow([today, name, qty]);
+    }
+  }
+}
+
+/**
+ * Reverse inventory-only return quantities.
+ */
+function reverseReturnInventoryOnly(products, quantities, amount, dateObj) {
+  var ss     = SpreadsheetApp.getActiveSpreadsheet(),
+      prodSh = ss.getSheetByName('Product wise daily return'),
+      target = new Date(dateObj.getFullYear(), dateObj.getMonth(), dateObj.getDate());
+  if (prodSh) {
+    var rows = prodSh.getDataRange().getValues();
+    for (var r = 1; r < rows.length; r++) {
+      var cellDate = rows[r][0] instanceof Date ? rows[r][0] : new Date(rows[r][0]);
+      if (cellDate.toDateString() === target.toDateString()) {
+        for (var i = 0; i < products.length; i++) {
+          if (rows[r][1] === products[i]) {
+            var newQty = Number(rows[r][2] || 0) - Number(quantities[i] || 0);
+            if (newQty > 0) {
+              prodSh.getRange(r + 1, 3).setValue(newQty);
+            } else {
+              prodSh.deleteRow(r + 1);
+              r--;
+            }
+          }
+        }
+      }
+    }
+  }
 }
 
 /**
