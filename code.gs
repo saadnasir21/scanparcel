@@ -1186,11 +1186,15 @@ function reconcileCODPayments() {
     const rawParcel = invoiceData[i][parcelIdx];
     const cleaned = String(rawParcel).replace(/\s+/g, '').trim();
     if (!cleaned) continue;
-    invoiceMap[cleaned] = {
-      cod: invoiceData[i][codIdx],
-      status: String(invoiceData[i][statusIdx]).toLowerCase(),
-      row: i
-    };
+    const status = String(invoiceData[i][statusIdx]).toLowerCase();
+    const entry = invoiceMap[cleaned];
+    if (!entry || status === 'delivered' || (entry.status !== 'delivered' && i > entry.row)) {
+      invoiceMap[cleaned] = {
+        cod: invoiceData[i][codIdx],
+        status: status,
+        row: i
+      };
+    }
   }
 
   const matchedParcels = new Set();
