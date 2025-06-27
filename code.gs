@@ -1,6 +1,30 @@
 // ==== a single-entry undo stack ====
 var DOC_PROPS = PropertiesService.getDocumentProperties();
 
+// caching for faster parcel lookups
+var PARCEL_INDEX_KEY = 'parcelIndex';
+var PARCEL_CACHE_TTL = 10 * 60; // seconds
+
+function getParcelIndex(sheet, parcelCol) {
+  var cache = CacheService.getDocumentCache();
+  var raw = cache.get(PARCEL_INDEX_KEY);
+  if (raw) return JSON.parse(raw);
+
+  var last = sheet.getLastRow();
+  var values = sheet.getRange(2, parcelCol, Math.max(last - 1, 0), 1).getValues();
+  var map = {};
+  for (var i = 0; i < values.length; i++) {
+    var key = String(values[i][0]).replace(/\s+/g, '').toUpperCase();
+    if (key) map[key] = i + 2; // adjust for header row
+  }
+  cache.put(PARCEL_INDEX_KEY, JSON.stringify(map), PARCEL_CACHE_TTL);
+  return map;
+}
+
+function invalidateParcelIndex() {
+  CacheService.getDocumentCache().remove(PARCEL_INDEX_KEY);
+}
+
 /**
  * Add the custom menu.
  */
@@ -21,6 +45,16 @@ function onOpen() {
  * Show the sidebar.
  */
 function openScannerSidebar() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName('Sheet1');
+  if (sheet) {
+    var head = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+    var parcelCol = head.indexOf('Parcel number') + 1;
+    if (parcelCol) {
+      invalidateParcelIndex();
+      getParcelIndex(sheet, parcelCol);
+    }
+  }
   var html = HtmlService
     .createHtmlOutputFromFile('ScannerSidebar')
     .setTitle('Parcel Scanner');
@@ -53,6 +87,7 @@ function onEdit(e) {
   if (!range) return;
   var sheet = range.getSheet();
   if (!sheet || sheet.getName() !== 'Sheet1') return;
+  invalidateParcelIndex();
 
   var head = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
   var statusCol  = head.indexOf('Shipping Status') + 1;
@@ -138,16 +173,12 @@ function processParcelScan(scannedValue) {
 
   if (!parcelCol) return 'ParcelColNotFound';
 
-  // find row quickly using only the parcel column
-  var last = sheet.getLastRow();
-  var parcelData = sheet.getRange(2, parcelCol, last-1, 1).getValues();
-  var foundRow = null;
-  for (var i = 0; i < parcelData.length; i++) {
-    var clean = String(parcelData[i][0]).replace(/\s+/g, '');
-    if (clean.toUpperCase() === scannedValue.toUpperCase()) {
-      foundRow = i + 2; // adjust for header row
-      break;
-    }
+  var index = getParcelIndex(sheet, parcelCol);
+  var foundRow = index[scannedValue.toUpperCase()] || null;
+  if (!foundRow) {
+    invalidateParcelIndex();
+    index = getParcelIndex(sheet, parcelCol);
+    foundRow = index[scannedValue.toUpperCase()] || null;
   }
   if (!foundRow) return 'NotFound';
   var data = sheet.getDataRange().getValues();
@@ -245,16 +276,12 @@ function processParcelConfirmReturn(scannedValue) {
 
   if (!parcelCol) return 'ParcelColNotFound';
 
-  // find row quickly using only the parcel column
-  var last = sheet.getLastRow();
-  var data = sheet.getRange(2, parcelCol, last-1, 1).getValues();
-  var foundRow = null;
-  for (var i = 0; i < data.length; i++) {
-    var clean = String(data[i][0]).replace(/\s+/g, '');
-    if (clean.toUpperCase() === scannedValue.toUpperCase()) {
-      foundRow = i + 2;
-      break;
-    }
+  var index = getParcelIndex(sheet, parcelCol);
+  var foundRow = index[scannedValue.toUpperCase()] || null;
+  if (!foundRow) {
+    invalidateParcelIndex();
+    index = getParcelIndex(sheet, parcelCol);
+    foundRow = index[scannedValue.toUpperCase()] || null;
   }
   if (!foundRow) return 'NotFound';
 
@@ -315,15 +342,12 @@ function processParcelConfirmDuplicate(scannedValue) {
 
   if (!parcelCol) return 'ParcelColNotFound';
 
-  var last = sheet.getLastRow();
-  var data = sheet.getRange(2, parcelCol, last-1, 1).getValues();
-  var foundRow = null;
-  for (var i = 0; i < data.length; i++) {
-    var clean = String(data[i][0]).replace(/\s+/g, '');
-    if (clean.toUpperCase() === scannedValue.toUpperCase()) {
-      foundRow = i + 2;
-      break;
-    }
+  var index = getParcelIndex(sheet, parcelCol);
+  var foundRow = index[scannedValue.toUpperCase()] || null;
+  if (!foundRow) {
+    invalidateParcelIndex();
+    index = getParcelIndex(sheet, parcelCol);
+    foundRow = index[scannedValue.toUpperCase()] || null;
   }
   if (!foundRow) return 'NotFound';
 
@@ -847,16 +871,15 @@ function cancelOrderByCustomer(parcelNumberRaw) {
 
   if (!parcelCol || !statusCol || !orderCol) return 'MissingHeaders';
 
-  var data = sheet.getDataRange().getValues();
-  var foundRow = -1;
-  for (var i = 1; i < data.length; i++) {
-    var val = String(data[i][parcelCol - 1]).replace(/\s+/g, '');
-    if (val.toUpperCase() === parcelNumber.toUpperCase()) {
-      foundRow = i + 1;
-      break;
-    }
+  var index = getParcelIndex(sheet, parcelCol);
+  var foundRow = index[parcelNumber.toUpperCase()] || null;
+  if (!foundRow) {
+    invalidateParcelIndex();
+    index = getParcelIndex(sheet, parcelCol);
+    foundRow = index[parcelNumber.toUpperCase()] || null;
   }
-  if (foundRow === -1) return 'NotFound';
+  if (!foundRow) return 'NotFound';
+  var data = sheet.getDataRange().getValues();
 
   var rowData = data[foundRow - 1];
   var currentStatus = rowData[statusCol - 1];
@@ -957,16 +980,15 @@ function manualSetStatus(parcelRaw, newStatus, dateStr) {
 
   if (!parcelCol || !statusCol || !dateCol) return 'MissingHeaders';
 
-  var data     = sheet.getDataRange().getValues();
-  var foundRow = -1;
-  for (var r = 1; r < data.length; r++) {
-    var val = String(data[r][parcelCol - 1]).replace(/\s+/g, '');
-    if (val.toUpperCase() === parcel.toUpperCase()) {
-      foundRow = r + 1;
-      break;
-    }
+  var index = getParcelIndex(sheet, parcelCol);
+  var foundRow = index[parcel.toUpperCase()] || null;
+  if (!foundRow) {
+    invalidateParcelIndex();
+    index = getParcelIndex(sheet, parcelCol);
+    foundRow = index[parcel.toUpperCase()] || null;
   }
-  if (foundRow === -1) return 'NotFound';
+  if (!foundRow) return 'NotFound';
+  var data = sheet.getDataRange().getValues();
 
   var rowData   = data[foundRow - 1];
   var oldStatus = rowData[statusCol - 1];
