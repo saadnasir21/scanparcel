@@ -3,7 +3,11 @@ var DOC_PROPS = PropertiesService.getDocumentProperties();
 
 // caching for faster parcel lookups
 var PARCEL_INDEX_KEY = 'parcelIndex';
-var PARCEL_CACHE_TTL = 10 * 60; // seconds
+// cache parcel lookups for a full day to avoid rebuilding the index
+var PARCEL_CACHE_TTL = 24 * 60 * 60; // seconds
+
+// disable row highlighting to speed up large batch scans
+var HIGHLIGHT_ROWS = false;
 
 function getParcelIndex(sheet, parcelCol) {
   var cache = CacheService.getDocumentCache();
@@ -67,6 +71,7 @@ function openScannerSidebar() {
  * @param {number} row Row number to highlight.
  */
 function highlightRow(sheet, row) {
+  if (!HIGHLIGHT_ROWS) return;
   sheet.setActiveRange(sheet.getRange(row, 1, 1, sheet.getLastColumn()));
   SpreadsheetApp.flush();
 }
