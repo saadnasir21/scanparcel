@@ -12,6 +12,13 @@ var HIGHLIGHT_ROWS = false;
 // cache customer info for duplicate checks
 var CUSTOMER_INDEX_KEY = 'customerIndex';
 
+// caches for summary sheets
+var DISPATCH_PROD_INDEX_KEY  = 'dispatchProdIndex';
+var DISPATCH_DAY_INDEX_KEY   = 'dispatchDayIndex';
+var RETURN_PROD_INDEX_KEY    = 'returnProdIndex';
+var RETURN_DAY_INDEX_KEY     = 'returnDayIndex';
+var SUMMARY_CACHE_TTL        = 24 * 60 * 60; // seconds
+
 function getParcelIndex(sheet, parcelCol) {
   var cache = CacheService.getDocumentCache();
   var raw = cache.get(PARCEL_INDEX_KEY);
@@ -68,6 +75,116 @@ function invalidateCustomerIndex() {
   CacheService.getDocumentCache().remove(CUSTOMER_INDEX_KEY);
 }
 
+// ----- summary sheet caches -----
+function dateKey(d) {
+  var t = d instanceof Date ? d : new Date(d);
+  t = new Date(t.getFullYear(), t.getMonth(), t.getDate());
+  return String(t.getTime());
+}
+
+function getDispatchProdIndex(sheet) {
+  var cache = CacheService.getDocumentCache();
+  var raw = cache.get(DISPATCH_PROD_INDEX_KEY);
+  if (raw) return JSON.parse(raw);
+  var last = sheet.getLastRow();
+  var values = sheet.getRange(2, 1, Math.max(last - 1, 0), 3).getValues();
+  var map = {};
+  for (var i = 0; i < values.length; i++) {
+    var k = dateKey(values[i][0]) + '|' + values[i][1];
+    map[k] = i + 2;
+  }
+  cache.put(DISPATCH_PROD_INDEX_KEY, JSON.stringify(map), SUMMARY_CACHE_TTL);
+  return map;
+}
+
+function getDispatchDayIndex(sheet) {
+  var cache = CacheService.getDocumentCache();
+  var raw = cache.get(DISPATCH_DAY_INDEX_KEY);
+  if (raw) return JSON.parse(raw);
+  var last = sheet.getLastRow();
+  var values = sheet.getRange(2, 1, Math.max(last - 1, 0), 1).getValues();
+  var map = {};
+  for (var i = 0; i < values.length; i++) {
+    map[dateKey(values[i][0])] = i + 2;
+  }
+  cache.put(DISPATCH_DAY_INDEX_KEY, JSON.stringify(map), SUMMARY_CACHE_TTL);
+  return map;
+}
+
+function getReturnProdIndex(sheet) {
+  var cache = CacheService.getDocumentCache();
+  var raw = cache.get(RETURN_PROD_INDEX_KEY);
+  if (raw) return JSON.parse(raw);
+  var last = sheet.getLastRow();
+  var values = sheet.getRange(2, 1, Math.max(last - 1, 0), 3).getValues();
+  var map = {};
+  for (var i = 0; i < values.length; i++) {
+    var k = dateKey(values[i][0]) + '|' + values[i][1];
+    map[k] = i + 2;
+  }
+  cache.put(RETURN_PROD_INDEX_KEY, JSON.stringify(map), SUMMARY_CACHE_TTL);
+  return map;
+}
+
+function getReturnDayIndex(sheet) {
+  var cache = CacheService.getDocumentCache();
+  var raw = cache.get(RETURN_DAY_INDEX_KEY);
+  if (raw) return JSON.parse(raw);
+  var last = sheet.getLastRow();
+  var values = sheet.getRange(2, 1, Math.max(last - 1, 0), 1).getValues();
+  var map = {};
+  for (var i = 0; i < values.length; i++) {
+    map[dateKey(values[i][0])] = i + 2;
+  }
+  cache.put(RETURN_DAY_INDEX_KEY, JSON.stringify(map), SUMMARY_CACHE_TTL);
+  return map;
+}
+
+function invalidateDispatchProdIndex() {
+  CacheService.getDocumentCache().remove(DISPATCH_PROD_INDEX_KEY);
+}
+function invalidateDispatchDayIndex() {
+  CacheService.getDocumentCache().remove(DISPATCH_DAY_INDEX_KEY);
+}
+function invalidateReturnProdIndex() {
+  CacheService.getDocumentCache().remove(RETURN_PROD_INDEX_KEY);
+}
+function invalidateReturnDayIndex() {
+  CacheService.getDocumentCache().remove(RETURN_DAY_INDEX_KEY);
+}
+
+function invalidateSummaryIndexes() {
+  invalidateDispatchProdIndex();
+  invalidateDispatchDayIndex();
+  invalidateReturnProdIndex();
+  invalidateReturnDayIndex();
+}
+
+function buildSummaryIndexes() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sh;
+  sh = ss.getSheetByName('Product wise daily dispatch');
+  if (sh) {
+    invalidateDispatchProdIndex();
+    getDispatchProdIndex(sh);
+  }
+  sh = ss.getSheetByName('Daily Dispatch Parcels');
+  if (sh) {
+    invalidateDispatchDayIndex();
+    getDispatchDayIndex(sh);
+  }
+  sh = ss.getSheetByName('Product wise daily return');
+  if (sh) {
+    invalidateReturnProdIndex();
+    getReturnProdIndex(sh);
+  }
+  sh = ss.getSheetByName('Daily Return Parcels');
+  if (sh) {
+    invalidateReturnDayIndex();
+    getReturnDayIndex(sh);
+  }
+}
+
 /**
  * Add the custom menu.
  */
@@ -105,6 +222,7 @@ function openScannerSidebar() {
       getCustomerIndex(sheet, nameCol, phoneCol, statusCol);
     }
   }
+  buildSummaryIndexes();
   var html = HtmlService
     .createHtmlOutputFromFile('ScannerSidebar')
     .setTitle('Parcel Scanner');
@@ -137,7 +255,17 @@ function onEdit(e) {
   var range = e.range;
   if (!range) return;
   var sheet = range.getSheet();
-  if (!sheet || sheet.getName() !== 'Sheet1') return;
+  if (!sheet) return;
+  var shName = sheet.getName();
+  if (shName !== 'Sheet1') {
+    if (shName === 'Product wise daily dispatch' ||
+        shName === 'Daily Dispatch Parcels' ||
+        shName === 'Product wise daily return' ||
+        shName === 'Daily Return Parcels') {
+      invalidateSummaryIndexes();
+    }
+    return;
+  }
   invalidateParcelIndex();
   invalidateCustomerIndex();
 
@@ -488,36 +616,40 @@ function updateDispatchSummaries(products, quantities, amount, dateObj) {
 
   // Product‐wise
   if (prodSh) {
-    var data = prodSh.getDataRange().getValues();
+    var idx = getDispatchProdIndex(prodSh);
     for (var i=0; i<products.length; i++) {
-      var name = products[i], qty = Number(quantities[i]||0);
-      var found = false;
-      for (var r=1; r<data.length; r++) {
-        var rowDate = data[r][0], rowProd = data[r][1], rowQty = data[r][2];
-        if (!(rowDate instanceof Date)) rowDate = new Date(rowDate);
-        if (rowDate.toDateString() === today.toDateString() && rowProd===name) {
-          prodSh.getRange(r+1,3).setValue(Number(rowQty||0)+qty);
-          found = true;
-          break;
-        }
+      var name = products[i];
+      var qty  = Number(quantities[i]||0);
+      var key  = dateKey(today)+'|'+name;
+      var row  = idx[key];
+      if (row) {
+        var cur = Number(prodSh.getRange(row,3).getValue()||0);
+        prodSh.getRange(row,3).setValue(cur+qty);
+      } else {
+        prodSh.appendRow([today, name, qty]);
+        idx[key] = prodSh.getLastRow();
       }
-      if (!found) prodSh.appendRow([today, name, qty]);
     }
+    CacheService.getDocumentCache()
+      .put(DISPATCH_PROD_INDEX_KEY, JSON.stringify(idx), SUMMARY_CACHE_TTL);
   }
 
   // Daily parcels
   if (dailySh) {
-    var data2 = dailySh.getDataRange().getValues(), found2 = false;
-    for (var k=1; k<data2.length; k++) {
-      var d = data2[k][0];
-      if (d instanceof Date && d.getTime()===today.getTime()) {
-        dailySh.getRange(k+1,2).setValue(Number(data2[k][1]||0)+1);
-        dailySh.getRange(k+1,3).setValue(Number(data2[k][2]||0)+amount);
-        found2 = true;
-        break;
-      }
+    var idx2 = getDispatchDayIndex(dailySh);
+    var key2 = dateKey(today);
+    var r2 = idx2[key2];
+    if (r2) {
+      var parcels = Number(dailySh.getRange(r2,2).getValue()||0)+1;
+      var amt     = Number(dailySh.getRange(r2,3).getValue()||0)+amount;
+      dailySh.getRange(r2,2).setValue(parcels);
+      dailySh.getRange(r2,3).setValue(amt);
+    } else {
+      dailySh.appendRow([today, 1, amount]);
+      idx2[key2] = dailySh.getLastRow();
     }
-    if (!found2) dailySh.appendRow([today, 1, amount]);
+    CacheService.getDocumentCache()
+      .put(DISPATCH_DAY_INDEX_KEY, JSON.stringify(idx2), SUMMARY_CACHE_TTL);
   }
 }
 
@@ -532,36 +664,40 @@ function updateReturnSummaries(products, quantities, amount, dateObj) {
 
   // Product‐wise
   if (prodSh) {
-    var data = prodSh.getDataRange().getValues();
+    var idx = getReturnProdIndex(prodSh);
     for (var i=0; i<products.length; i++) {
-      var name = products[i], qty = Number(quantities[i]||0);
-      var found = false;
-      for (var r=1; r<data.length; r++) {
-        var rowDate = data[r][0], rowProd = data[r][1], rowQty = data[r][2];
-        if (!(rowDate instanceof Date)) rowDate = new Date(rowDate);
-        if (rowDate.toDateString() === today.toDateString() && rowProd===name) {
-          prodSh.getRange(r+1,3).setValue(Number(rowQty||0)+qty);
-          found = true;
-          break;
-        }
+      var name = products[i];
+      var qty  = Number(quantities[i]||0);
+      var key  = dateKey(today)+'|'+name;
+      var row  = idx[key];
+      if (row) {
+        var cur = Number(prodSh.getRange(row,3).getValue()||0);
+        prodSh.getRange(row,3).setValue(cur+qty);
+      } else {
+        prodSh.appendRow([today, name, qty]);
+        idx[key] = prodSh.getLastRow();
       }
-      if (!found) prodSh.appendRow([today, name, qty]);
     }
+    CacheService.getDocumentCache()
+      .put(RETURN_PROD_INDEX_KEY, JSON.stringify(idx), SUMMARY_CACHE_TTL);
   }
 
   // Daily returns
   if (dailySh) {
-    var data2 = dailySh.getDataRange().getValues(), found2 = false;
-    for (var k=1; k<data2.length; k++) {
-      var d = data2[k][0];
-      if (d instanceof Date && d.getTime()===today.getTime()) {
-        dailySh.getRange(k+1,2).setValue(Number(data2[k][1]||0)+1);
-        dailySh.getRange(k+1,3).setValue(Number(data2[k][2]||0)+amount);
-        found2 = true;
-        break;
-      }
+    var idx2 = getReturnDayIndex(dailySh);
+    var key2 = dateKey(today);
+    var r2 = idx2[key2];
+    if (r2) {
+      var parcels = Number(dailySh.getRange(r2,2).getValue()||0)+1;
+      var amt     = Number(dailySh.getRange(r2,3).getValue()||0)+amount;
+      dailySh.getRange(r2,2).setValue(parcels);
+      dailySh.getRange(r2,3).setValue(amt);
+    } else {
+      dailySh.appendRow([today, 1, amount]);
+      idx2[key2] = dailySh.getLastRow();
     }
-    if (!found2) dailySh.appendRow([today, 1, amount]);
+    CacheService.getDocumentCache()
+      .put(RETURN_DAY_INDEX_KEY, JSON.stringify(idx2), SUMMARY_CACHE_TTL);
   }
 }
 
@@ -583,44 +719,43 @@ function reverseDispatchSummaries(products, quantities, amount, dateObj) {
       target  = new Date(dateObj.getFullYear(), dateObj.getMonth(), dateObj.getDate());
   // 1) Product‐wise sheet
   if (prodSh) {
-    var rows = prodSh.getDataRange().getValues();
-    for (var r = 1; r < rows.length; r++) {
-      var cellDate = rows[r][0] instanceof Date
-                     ? rows[r][0]
-                     : new Date(rows[r][0]);
-      if (cellDate.toDateString() === target.toDateString()) {
-        for (var i = 0; i < products.length; i++) {
-          if (rows[r][1] === products[i]) {
-            var newQty = Number(rows[r][2]||0) - Number(quantities[i]||0);
-            if (newQty > 0) {
-              prodSh.getRange(r+1, 3).setValue(newQty);
-            } else {
-              prodSh.deleteRow(r+1);
-              r--; // adjust for deleted row
-            }
-          }
+    var idx = getDispatchProdIndex(prodSh);
+    for (var i=0; i<products.length; i++) {
+      var key = dateKey(target)+'|'+products[i];
+      var row = idx[key];
+      if (row) {
+        var newQty = Number(prodSh.getRange(row,3).getValue()||0) - Number(quantities[i]||0);
+        if (newQty > 0) {
+          prodSh.getRange(row,3).setValue(newQty);
+        } else {
+          prodSh.deleteRow(row);
+          delete idx[key];
+          for (var k in idx) if (idx[k] > row) idx[k]--;
         }
       }
     }
+    CacheService.getDocumentCache()
+      .put(DISPATCH_PROD_INDEX_KEY, JSON.stringify(idx), SUMMARY_CACHE_TTL);
   }
   // 2) Daily parcels sheet
   if (dailySh) {
-    var rows2 = dailySh.getDataRange().getValues();
-    for (var k = 1; k < rows2.length; k++) {
-      var cellDate2 = rows2[k][0] instanceof Date
-                      ? rows2[k][0]
-                      : new Date(rows2[k][0]);
-      if (cellDate2.toDateString() === target.toDateString()) {
-        var parcels = Number(rows2[k][1]||0) - 1;
-        var amt     = Number(rows2[k][2]||0) - amount;
-        if (parcels > 0) {
-          dailySh.getRange(k+1, 2).setValue(parcels);
-          dailySh.getRange(k+1, 3).setValue(amt);
-        } else {
-          dailySh.deleteRow(k+1);
-        }
-        return true;
+    var idx2 = getDispatchDayIndex(dailySh);
+    var key2 = dateKey(target);
+    var r2 = idx2[key2];
+    if (r2) {
+      var parcels = Number(dailySh.getRange(r2,2).getValue()||0) - 1;
+      var amt     = Number(dailySh.getRange(r2,3).getValue()||0) - amount;
+      if (parcels > 0) {
+        dailySh.getRange(r2,2).setValue(parcels);
+        dailySh.getRange(r2,3).setValue(amt);
+      } else {
+        dailySh.deleteRow(r2);
+        delete idx2[key2];
+        for (var j in idx2) if (idx2[j] > r2) idx2[j]--;
       }
+      CacheService.getDocumentCache()
+        .put(DISPATCH_DAY_INDEX_KEY, JSON.stringify(idx2), SUMMARY_CACHE_TTL);
+      return true;
     }
   }
   return false;
@@ -634,21 +769,22 @@ function updateDispatchInventoryOnly(products, quantities, amount, dateObj, orde
       prodSh = ss.getSheetByName('Product wise daily dispatch'),
       today  = new Date(dateObj.getFullYear(), dateObj.getMonth(), dateObj.getDate());
   if (prodSh) {
-    var data = prodSh.getDataRange().getValues();
-    for (var i = 0; i < products.length; i++) {
-      var name = products[i], qty = Number(quantities[i] || 0);
-      var found = false;
-      for (var r = 1; r < data.length; r++) {
-        var rowDate = data[r][0];
-        if (!(rowDate instanceof Date)) rowDate = new Date(rowDate);
-        if (rowDate.toDateString() === today.toDateString() && data[r][1] === name) {
-          prodSh.getRange(r + 1, 3).setValue(Number(data[r][2] || 0) + qty);
-          found = true;
-          break;
-        }
+    var idx = getDispatchProdIndex(prodSh);
+    for (var i=0;i<products.length;i++) {
+      var name = products[i];
+      var qty  = Number(quantities[i]||0);
+      var key  = dateKey(today)+'|'+name;
+      var row  = idx[key];
+      if (row) {
+        var cur = Number(prodSh.getRange(row,3).getValue()||0);
+        prodSh.getRange(row,3).setValue(cur+qty);
+      } else {
+        prodSh.appendRow([today, name, qty]);
+        idx[key] = prodSh.getLastRow();
       }
-      if (!found) prodSh.appendRow([today, name, qty]);
     }
+    CacheService.getDocumentCache()
+      .put(DISPATCH_PROD_INDEX_KEY, JSON.stringify(idx), SUMMARY_CACHE_TTL);
   }
   if (orderNum) recordLocalRiderOrder(orderNum, amount, today);
 }
@@ -661,23 +797,23 @@ function reverseDispatchInventoryOnly(products, quantities, amount, dateObj, ord
       prodSh = ss.getSheetByName('Product wise daily dispatch'),
       target = new Date(dateObj.getFullYear(), dateObj.getMonth(), dateObj.getDate());
   if (prodSh) {
-    var rows = prodSh.getDataRange().getValues();
-    for (var r = 1; r < rows.length; r++) {
-      var cellDate = rows[r][0] instanceof Date ? rows[r][0] : new Date(rows[r][0]);
-      if (cellDate.toDateString() === target.toDateString()) {
-        for (var i = 0; i < products.length; i++) {
-          if (rows[r][1] === products[i]) {
-            var newQty = Number(rows[r][2] || 0) - Number(quantities[i] || 0);
-            if (newQty > 0) {
-              prodSh.getRange(r + 1, 3).setValue(newQty);
-            } else {
-              prodSh.deleteRow(r + 1);
-              r--;
-            }
-          }
+    var idx = getDispatchProdIndex(prodSh);
+    for (var i=0;i<products.length;i++) {
+      var key = dateKey(target)+'|'+products[i];
+      var row = idx[key];
+      if (row) {
+        var newQty = Number(prodSh.getRange(row,3).getValue()||0) - Number(quantities[i]||0);
+        if (newQty > 0) {
+          prodSh.getRange(row,3).setValue(newQty);
+        } else {
+          prodSh.deleteRow(row);
+          delete idx[key];
+          for (var k in idx) if (idx[k] > row) idx[k]--;
         }
       }
     }
+    CacheService.getDocumentCache()
+      .put(DISPATCH_PROD_INDEX_KEY, JSON.stringify(idx), SUMMARY_CACHE_TTL);
   }
   if (orderNum) removeLocalRiderOrder(orderNum, target);
 }
@@ -719,21 +855,22 @@ function updateReturnInventoryOnly(products, quantities, amount, dateObj) {
       prodSh = ss.getSheetByName('Product wise daily return'),
       today  = new Date(dateObj.getFullYear(), dateObj.getMonth(), dateObj.getDate());
   if (prodSh) {
-    var data = prodSh.getDataRange().getValues();
-    for (var i = 0; i < products.length; i++) {
-      var name = products[i], qty = Number(quantities[i] || 0);
-      var found = false;
-      for (var r = 1; r < data.length; r++) {
-        var rowDate = data[r][0];
-        if (!(rowDate instanceof Date)) rowDate = new Date(rowDate);
-        if (rowDate.toDateString() === today.toDateString() && data[r][1] === name) {
-          prodSh.getRange(r + 1, 3).setValue(Number(data[r][2] || 0) + qty);
-          found = true;
-          break;
-        }
+    var idx = getReturnProdIndex(prodSh);
+    for (var i=0;i<products.length;i++) {
+      var name = products[i];
+      var qty  = Number(quantities[i]||0);
+      var key  = dateKey(today)+'|'+name;
+      var row  = idx[key];
+      if (row) {
+        var cur = Number(prodSh.getRange(row,3).getValue()||0);
+        prodSh.getRange(row,3).setValue(cur+qty);
+      } else {
+        prodSh.appendRow([today, name, qty]);
+        idx[key] = prodSh.getLastRow();
       }
-      if (!found) prodSh.appendRow([today, name, qty]);
     }
+    CacheService.getDocumentCache()
+      .put(RETURN_PROD_INDEX_KEY, JSON.stringify(idx), SUMMARY_CACHE_TTL);
   }
 }
 
@@ -745,23 +882,23 @@ function reverseReturnInventoryOnly(products, quantities, amount, dateObj) {
       prodSh = ss.getSheetByName('Product wise daily return'),
       target = new Date(dateObj.getFullYear(), dateObj.getMonth(), dateObj.getDate());
   if (prodSh) {
-    var rows = prodSh.getDataRange().getValues();
-    for (var r = 1; r < rows.length; r++) {
-      var cellDate = rows[r][0] instanceof Date ? rows[r][0] : new Date(rows[r][0]);
-      if (cellDate.toDateString() === target.toDateString()) {
-        for (var i = 0; i < products.length; i++) {
-          if (rows[r][1] === products[i]) {
-            var newQty = Number(rows[r][2] || 0) - Number(quantities[i] || 0);
-            if (newQty > 0) {
-              prodSh.getRange(r + 1, 3).setValue(newQty);
-            } else {
-              prodSh.deleteRow(r + 1);
-              r--;
-            }
-          }
+    var idx = getReturnProdIndex(prodSh);
+    for (var i=0;i<products.length;i++) {
+      var key = dateKey(target)+'|'+products[i];
+      var row = idx[key];
+      if (row) {
+        var newQty = Number(prodSh.getRange(row,3).getValue()||0) - Number(quantities[i]||0);
+        if (newQty > 0) {
+          prodSh.getRange(row,3).setValue(newQty);
+        } else {
+          prodSh.deleteRow(row);
+          delete idx[key];
+          for (var k in idx) if (idx[k] > row) idx[k]--;
         }
       }
     }
+    CacheService.getDocumentCache()
+      .put(RETURN_PROD_INDEX_KEY, JSON.stringify(idx), SUMMARY_CACHE_TTL);
   }
 }
 
@@ -782,44 +919,43 @@ function reverseReturnSummaries(products, quantities, amount, dateObj) {
       target  = new Date(dateObj.getFullYear(), dateObj.getMonth(), dateObj.getDate());
   // 1) Product‐wise return sheet
   if (prodSh) {
-    var rows = prodSh.getDataRange().getValues();
-    for (var r = 1; r < rows.length; r++) {
-      var cellDate = rows[r][0] instanceof Date
-                     ? rows[r][0]
-                     : new Date(rows[r][0]);
-      if (cellDate.toDateString() === target.toDateString()) {
-        for (var i = 0; i < products.length; i++) {
-          if (rows[r][1] === products[i]) {
-            var newQty = Number(rows[r][2]||0) - Number(quantities[i]||0);
-            if (newQty > 0) {
-              prodSh.getRange(r+1, 3).setValue(newQty);
-            } else {
-              prodSh.deleteRow(r+1);
-              r--;
-            }
-          }
+    var idx = getReturnProdIndex(prodSh);
+    for (var i=0; i<products.length; i++) {
+      var key = dateKey(target)+'|'+products[i];
+      var row = idx[key];
+      if (row) {
+        var newQty = Number(prodSh.getRange(row,3).getValue()||0) - Number(quantities[i]||0);
+        if (newQty > 0) {
+          prodSh.getRange(row,3).setValue(newQty);
+        } else {
+          prodSh.deleteRow(row);
+          delete idx[key];
+          for (var k in idx) if (idx[k] > row) idx[k]--;
         }
       }
     }
+    CacheService.getDocumentCache()
+      .put(RETURN_PROD_INDEX_KEY, JSON.stringify(idx), SUMMARY_CACHE_TTL);
   }
   // 2) Daily return parcels sheet
   if (dailySh) {
-    var rows2 = dailySh.getDataRange().getValues();
-    for (var k = 1; k < rows2.length; k++) {
-      var cellDate2 = rows2[k][0] instanceof Date
-                      ? rows2[k][0]
-                      : new Date(rows2[k][0]);
-      if (cellDate2.toDateString() === target.toDateString()) {
-        var parcels = Number(rows2[k][1]||0) - 1;
-        var amt     = Number(rows2[k][2]||0) - amount;
-        if (parcels > 0) {
-          dailySh.getRange(k+1, 2).setValue(parcels);
-          dailySh.getRange(k+1, 3).setValue(amt);
-        } else {
-          dailySh.deleteRow(k+1);
-        }
-        return true;
+    var idx2 = getReturnDayIndex(dailySh);
+    var key2 = dateKey(target);
+    var r2 = idx2[key2];
+    if (r2) {
+      var parcels = Number(dailySh.getRange(r2,2).getValue()||0) - 1;
+      var amt     = Number(dailySh.getRange(r2,3).getValue()||0) - amount;
+      if (parcels > 0) {
+        dailySh.getRange(r2,2).setValue(parcels);
+        dailySh.getRange(r2,3).setValue(amt);
+      } else {
+        dailySh.deleteRow(r2);
+        delete idx2[key2];
+        for (var j in idx2) if (idx2[j] > r2) idx2[j]--;
       }
+      CacheService.getDocumentCache()
+        .put(RETURN_DAY_INDEX_KEY, JSON.stringify(idx2), SUMMARY_CACHE_TTL);
+      return true;
     }
   }
   return false;
