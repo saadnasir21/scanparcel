@@ -493,7 +493,9 @@ function processParcelConfirmReturn(scannedValue) {
       dateCol    = headers.indexOf("Dispatch Date")+1,
       productCol = headers.indexOf("Product name")+1,
       qtyCol     = headers.indexOf("Quantity")+1,
-      amountCol  = headers.indexOf("Amount")+1;
+      amountCol  = headers.indexOf("Amount")+1,
+      nameCol    = headers.indexOf("Customer Name")+1,
+      phoneCol   = headers.indexOf("Phone Number")+1,
       orderCol   = headers.indexOf("Order Number")+1;
 
   if (!parcelCol) return 'ParcelColNotFound';
@@ -563,7 +565,9 @@ function processParcelConfirmDuplicate(scannedValue) {
       dateCol    = headers.indexOf("Dispatch Date")+1,
       productCol = headers.indexOf("Product name")+1,
       qtyCol     = headers.indexOf("Quantity")+1,
-      amountCol  = headers.indexOf("Amount")+1;
+      amountCol  = headers.indexOf("Amount")+1,
+      nameCol    = headers.indexOf("Customer Name")+1,
+      phoneCol   = headers.indexOf("Phone Number")+1;
 
   if (!parcelCol) return 'ParcelColNotFound';
 
