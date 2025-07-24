@@ -196,8 +196,7 @@ function onOpen() {
     .addSubMenu(SpreadsheetApp.getUi().createMenu('Dispatch Summary')
       .addItem('Last 5 Days', 'showDispatchSummaryLast5')
       .addItem('Last Week', 'showDispatchSummaryWeek')
-      .addItem('Last Month', 'showDispatchSummaryMonth')
-      .addItem('Custom Range…', 'showDispatchSummaryCustom'))
+      .addItem('Last Month', 'showDispatchSummaryMonth'))
     .addToUi();
 }
 
@@ -1269,111 +1268,6 @@ function updateDispatchSummarySheet(days) {
 function showDispatchSummaryLast5()  { updateDispatchSummarySheet(5); }
 function showDispatchSummaryWeek()   { updateDispatchSummarySheet(7); }
 function showDispatchSummaryMonth()  { updateDispatchSummarySheet(30); }
-
-function updateDispatchSummaryRange(start, end) {
-  var ss = SpreadsheetApp.getActiveSpreadsheet();
-  var source = ss.getSheetByName('Product wise daily dispatch');
-  if (!source) return 'MissingSheet';
-  var out = ss.getSheetByName('Dispatch Summary');
-  if (!out) out = ss.insertSheet('Dispatch Summary');
-  out.clearContents();
-  out.appendRow(['Product name', 'Quantity']);
-
-  var startDate = new Date(start); startDate.setHours(0,0,0,0);
-  var endDate   = new Date(end);   endDate.setHours(0,0,0,0);
-
-  var rows = source.getDataRange().getValues();
-  var totals = {};
-  for (var i=1; i<rows.length; i++) {
-    var d = rows[i][0];
-    var prod = rows[i][1];
-    var qty = Number(rows[i][2]||0);
-    if (!(d instanceof Date)) d = new Date(d);
-    if (d >= startDate && d <= endDate) {
-      totals[prod] = (totals[prod]||0) + qty;
-    }
-  }
-  var keys = Object.keys(totals).sort();
-  for (var j=0; j<keys.length; j++) {
-    out.appendRow([keys[j], totals[keys[j]]]);
-  }
-  return 'Updated';
-}
-
-function showDispatchSummaryCustom() {
-  var html = HtmlService.createHtmlOutputFromFile('DispatchSummaryDialog')
-    .setWidth(300).setHeight(150);
-  SpreadsheetApp.getUi().showModalDialog(html, 'Dispatch Summary Range');
-}
-
-function createDispatchSummaryCustom(start, end) {
-  return updateDispatchSummaryRange(start, end);
-}
-
-/**
- * Show a dialog to upload the COD invoice CSV.
- */
-function openCodUploadDialog() {
-  var html = HtmlService.createHtmlOutputFromFile('CodUploadDialog')
-    .setWidth(300).setHeight(150);
-  SpreadsheetApp.getUi().showModalDialog(html, 'Upload COD Invoice');
-}
-
-/**
- * Receive uploaded invoice file (base64 or blob), store it and reconcile.
- *
- * @param {string|Blob|Object} fileData Base64 string, blob or {data,name}.
- * @return {string} Confirmation message.
- */
-function uploadCodInvoice(fileData) {
-  var blob;
-  if (fileData instanceof Blob) {
-    blob = fileData;
-  } else if (fileData && typeof fileData === 'object' && fileData.data) {
-    var base = String(fileData.data).replace(/^data:.*;base64,/, '');
-    var type = fileData.type || 'application/octet-stream';
-    blob = Utilities.newBlob(Utilities.base64Decode(base), type, fileData.name || 'upload');
-  } else if (typeof fileData === 'string') {
-    var baseStr = fileData.replace(/^data:.*;base64,/, '');
-    blob = Utilities.newBlob(Utilities.base64Decode(baseStr));
-  } else {
-    throw new Error('Unsupported file');
-  }
-
-  var extMatch = blob.getName().match(/\.([^.]+)$/);
-  var ext = extMatch ? extMatch[1].toLowerCase() : 'csv';
-  var data;
-
-  if (ext === 'csv') {
-    data = Utilities.parseCsv(blob.getDataAsString());
-  } else if (ext === 'xls' || ext === 'xlsx') {
-    var tmp = Drive.Files.insert({title: blob.getName(), mimeType: blob.getContentType()}, blob, {convert: true});
-    try {
-      var tempSs = SpreadsheetApp.openById(tmp.id);
-      data = tempSs.getSheets()[0].getDataRange().getValues();
-    } finally {
-      Drive.Files.remove(tmp.id);
-    }
-  } else {
-    throw new Error('Unsupported file extension: ' + ext);
-  }
-
-  var ss = SpreadsheetApp.getActiveSpreadsheet();
-  var sheet = ss.getSheetByName('TCS Invoice');
-  if (!sheet) sheet = ss.insertSheet('TCS Invoice');
-
-  var hasHeader = sheet.getLastRow() > 0;
-  if (hasHeader) {
-    if (data.length > 1) {
-      sheet.getRange(sheet.getLastRow() + 1, 1, data.length - 1, data[0].length)
-           .setValues(data.slice(1));
-    }
-  } else {
-    sheet.getRange(1, 1, data.length, data[0].length).setValues(data);
-  }
-  reconcileCODPayments();
-  return 'Invoice uploaded and reconciled.';
-}
 
 /**
  * Reconcile COD payments from invoice data and mark orders.
