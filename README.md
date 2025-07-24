@@ -66,7 +66,7 @@ light green.
 
 ## Dispatch Summary
 
-The **Scanner** menu also provides a **Dispatch Summary** submenu. Choose one of the preset ranges (Last 5 Days, Last Week or Last Month) or pick **Custom Range…** to enter your own start and end dates. A sheet named **Dispatch Summary** will be generated with total quantities grouped by product for the selected period.
+The **Scanner** menu also provides a **Dispatch Summary** submenu. Choose one of the preset ranges (Last 5 Days, Last Week or Last Month) and a sheet named **Dispatch Summary** will be generated with total quantities grouped by product for the selected period.
 
 ## Local Rider Orders
 
