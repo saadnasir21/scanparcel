@@ -372,7 +372,7 @@ function onEdit(e) {
  * First-time scan handler: marks Dispatched or signals confirmReturn.
  */
 function processParcelScan(scannedValue) {
-  scannedValue = scannedValue.trim().replace(/\s+/g, '');
+  scannedValue = String(scannedValue || '').trim().replace(/\s+/g, '');
   if (!scannedValue) return 'Empty';
 
   var ss      = SpreadsheetApp.getActiveSpreadsheet(),
@@ -481,7 +481,7 @@ function processParcelScan(scannedValue) {
  * After confirm, mark Returned.
  */
 function processParcelConfirmReturn(scannedValue) {
-  scannedValue = scannedValue.trim().replace(/\s+/g,'');
+  scannedValue = String(scannedValue || '').trim().replace(/\s+/g,'');
   if (!scannedValue) return 'Empty';
 
   var ss      = SpreadsheetApp.getActiveSpreadsheet(),
@@ -551,7 +551,7 @@ function processParcelConfirmReturn(scannedValue) {
  * After customer duplicate warning, mark Dispatched.
  */
 function processParcelConfirmDuplicate(scannedValue) {
-  scannedValue = scannedValue.trim().replace(/\s+/g,'');
+  scannedValue = String(scannedValue || '').trim().replace(/\s+/g,'');
   if (!scannedValue) return 'Empty';
 
   var ss      = SpreadsheetApp.getActiveSpreadsheet(),
@@ -1093,7 +1093,7 @@ function findOrderIdByName(orderName) {
  * Updates column G to "Cancelled by Customer" and cancels on Shopify.
  */
 function cancelOrderByCustomer(parcelNumberRaw) {
-  var parcelNumber = parcelNumberRaw.trim().replace(/\s+/g, '');
+  var parcelNumber = String(parcelNumberRaw || '').trim().replace(/\s+/g, '');
   if (!parcelNumber) return 'Empty';
 
   var ss     = SpreadsheetApp.getActiveSpreadsheet();
