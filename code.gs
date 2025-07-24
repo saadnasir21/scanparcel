@@ -76,6 +76,42 @@ function invalidateCustomerIndex() {
   CacheService.getDocumentCache().remove(CUSTOMER_INDEX_KEY);
 }
 
+/**
+ * Remove a row's references from the cached customer index so we
+ * don't rebuild the entire index on every scan.
+ * @param {number} row The 1-based row number that was updated.
+ * @param {string} name Customer name value from that row.
+ * @param {string} phone Phone number value from that row.
+ */
+function removeFromCustomerIndex(row, name, phone) {
+  var cache = CacheService.getDocumentCache();
+  var raw = cache.get(CUSTOMER_INDEX_KEY);
+  if (!raw) return;
+  var idx = JSON.parse(raw);
+  var changed = false;
+  if (name) {
+    var key = String(name).trim().toUpperCase();
+    var arr = idx.names[key];
+    if (arr) {
+      idx.names[key] = arr.filter(function(r){ return r !== row; });
+      if (!idx.names[key].length) delete idx.names[key];
+      changed = true;
+    }
+  }
+  if (phone) {
+    var key2 = String(phone).trim();
+    var arr2 = idx.phones[key2];
+    if (arr2) {
+      idx.phones[key2] = arr2.filter(function(r){ return r !== row; });
+      if (!idx.phones[key2].length) delete idx.phones[key2];
+      changed = true;
+    }
+  }
+  if (changed) {
+    cache.put(CUSTOMER_INDEX_KEY, JSON.stringify(idx), PARCEL_CACHE_TTL);
+  }
+}
+
 // ----- summary sheet caches -----
 function dateKey(d) {
   var t = d instanceof Date ? d : new Date(d);
@@ -410,7 +446,8 @@ function processParcelScan(scannedValue) {
 
   // write new
   sheet.getRange(foundRow,statusCol).setValue(newStatus);
-  invalidateCustomerIndex();
+  removeFromCustomerIndex(foundRow, nameCol ? rowData[nameCol-1] : '',
+                         phoneCol ? rowData[phoneCol-1] : '');
   var now = new Date(),
       todayMid = new Date(now.getFullYear(),now.getMonth(),now.getDate());
   sheet.getRange(foundRow,dateCol).setValue(todayMid);
@@ -477,7 +514,8 @@ function processParcelConfirmReturn(scannedValue) {
 
   // write Returned
   sheet.getRange(foundRow,statusCol).setValue('Returned');
-  invalidateCustomerIndex();
+  removeFromCustomerIndex(foundRow, nameCol ? rowData[nameCol-1] : '',
+                         phoneCol ? rowData[phoneCol-1] : '');
   var now = new Date(),
       todayMid = new Date(now.getFullYear(),now.getMonth(),now.getDate());
   sheet.getRange(foundRow,dateCol).setValue(todayMid);
@@ -550,7 +588,8 @@ function processParcelConfirmDuplicate(scannedValue) {
   }
 
   sheet.getRange(foundRow,statusCol).setValue('Dispatched');
-  invalidateCustomerIndex();
+  removeFromCustomerIndex(foundRow, nameCol ? rowData[nameCol-1] : '',
+                         phoneCol ? rowData[phoneCol-1] : '');
   var now = new Date(), todayMid = new Date(now.getFullYear(),now.getMonth(),now.getDate());
   sheet.getRange(foundRow,dateCol).setValue(todayMid);
 
@@ -1066,6 +1105,8 @@ function cancelOrderByCustomer(parcelNumberRaw) {
   var statusCol = head.indexOf("Shipping Status") + 1;
   var dateCol   = head.indexOf("Dispatch Date") + 1;
   var orderCol  = head.indexOf("Order Number") + 1;
+  var nameCol   = head.indexOf("Customer Name") + 1;
+  var phoneCol  = head.indexOf("Phone Number") + 1;
 
   if (!parcelCol || !statusCol || !orderCol) return 'MissingHeaders';
 
@@ -1086,7 +1127,8 @@ function cancelOrderByCustomer(parcelNumberRaw) {
 
   // Set "Cancelled by Customer"
   sheet.getRange(foundRow, statusCol).setValue("Cancelled by Customer");
-  invalidateCustomerIndex();
+  removeFromCustomerIndex(foundRow, nameCol ? rowData[nameCol - 1] : '',
+                         phoneCol ? rowData[phoneCol - 1] : '');
   var todayMid = new Date(); todayMid.setHours(0, 0, 0, 0);
   sheet.getRange(foundRow, dateCol).setValue(todayMid);
 
@@ -1117,6 +1159,8 @@ function cancelOrderByNumber(orderNumRaw) {
   var orderCol  = head.indexOf("Order Number") + 1;
   var statusCol = head.indexOf("Shipping Status") + 1;
   var dateCol   = head.indexOf("Dispatch Date") + 1;
+  var nameCol   = head.indexOf("Customer Name") + 1;
+  var phoneCol  = head.indexOf("Phone Number") + 1;
 
   if (!orderCol || !statusCol || !dateCol) return 'MissingHeaders';
 
@@ -1138,6 +1182,8 @@ function cancelOrderByNumber(orderNumRaw) {
   }
 
   sheet.getRange(foundRow, statusCol).setValue("Cancelled by Customer");
+  removeFromCustomerIndex(foundRow, nameCol ? rowData[nameCol - 1] : '',
+                         phoneCol ? rowData[phoneCol - 1] : '');
   var todayMid = new Date(); todayMid.setHours(0, 0, 0, 0);
   sheet.getRange(foundRow, dateCol).setValue(todayMid);
 
@@ -1177,6 +1223,8 @@ function manualSetStatus(parcelRaw, newStatus, dateStr) {
   var qtyCol     = head.indexOf("Quantity") + 1;
   var amountCol  = head.indexOf("Amount") + 1;
   var orderCol   = head.indexOf("Order Number") + 1;
+  var nameCol    = head.indexOf("Customer Name") + 1;
+  var phoneCol   = head.indexOf("Phone Number") + 1;
 
   if (!parcelCol || !statusCol || !dateCol) return 'MissingHeaders';
 
@@ -1222,7 +1270,8 @@ function manualSetStatus(parcelRaw, newStatus, dateStr) {
   // write new status/date
   sheet.getRange(foundRow, statusCol).setValue(newStatus);
   sheet.getRange(foundRow, dateCol).setValue(dateObj);
-  invalidateCustomerIndex();
+  removeFromCustomerIndex(foundRow, nameCol ? rowData[nameCol - 1] : '',
+                         phoneCol ? rowData[phoneCol - 1] : '');
 
   // add new summary data if needed
   if (newStatus === 'Dispatched' || newStatus === 'Dispatch through Bykea') {
