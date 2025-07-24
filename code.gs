@@ -19,6 +19,20 @@ var RETURN_PROD_INDEX_KEY    = 'returnProdIndex';
 var RETURN_DAY_INDEX_KEY     = 'returnDayIndex';
 var SUMMARY_CACHE_TTL        = 24 * 60 * 60; // seconds
 
+function findHeaderIndex(headers, name) {
+  var target = String(name).replace(/\s+/g, '').toLowerCase();
+  for (var i = 0; i < headers.length; i++) {
+    var h = String(headers[i]).replace(/\s+/g, '').toLowerCase();
+    if (h === target) return i;
+  }
+  return -1;
+}
+
+function findHeader(headers, name) {
+  var idx = findHeaderIndex(headers, name);
+  return idx >= 0 ? idx + 1 : 0;
+}
+
 function getParcelIndex(sheet, parcelCol) {
   if (!sheet) return {};
   var cache = CacheService.getDocumentCache();
@@ -209,10 +223,10 @@ function openScannerSidebar() {
   var sheet = ss.getSheetByName('Sheet1');
   if (sheet) {
     var head = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
-    var parcelCol = head.indexOf('Parcel number') + 1;
-    var nameCol   = head.indexOf('Customer Name') + 1;
-    var phoneCol  = head.indexOf('Phone Number') + 1;
-    var statusCol = head.indexOf('Shipping Status') + 1;
+    var parcelCol = findHeader(head, 'Parcel number');
+    var nameCol   = findHeader(head, 'Customer Name');
+    var phoneCol  = findHeader(head, 'Phone Number');
+    var statusCol = findHeader(head, 'Shipping Status');
     if (parcelCol) {
       invalidateParcelIndex();
       getParcelIndex(sheet, parcelCol);
@@ -270,12 +284,12 @@ function onEdit(e) {
   invalidateCustomerIndex();
 
   var head = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
-  var statusCol  = head.indexOf('Shipping Status') + 1;
-  var dateCol    = head.indexOf('Dispatch Date') + 1;
-  var productCol = head.indexOf('Product name') + 1;
-  var qtyCol     = head.indexOf('Quantity') + 1;
-  var amountCol  = head.indexOf('Amount') + 1;
-  var orderCol   = head.indexOf('Order Number') + 1;
+  var statusCol  = findHeader(head, 'Shipping Status');
+  var dateCol    = findHeader(head, 'Dispatch Date');
+  var productCol = findHeader(head, 'Product name');
+  var qtyCol     = findHeader(head, 'Quantity');
+  var amountCol  = findHeader(head, 'Amount');
+  var orderCol   = findHeader(head, 'Order Number');
 
   if (!statusCol || !dateCol) return;
   if (range.getColumn() !== statusCol || range.getRow() === 1) return;
@@ -343,14 +357,14 @@ function processParcelScan(scannedValue) {
       sheet   = ss.getSheetByName("Sheet1");
   if (!sheet) return 'SheetNotFound';
   var headers = sheet.getRange(1,1,1,sheet.getLastColumn()).getValues()[0],
-      parcelCol  = headers.indexOf("Parcel number")+1,
-      statusCol  = headers.indexOf("Shipping Status")+1,
-      dateCol    = headers.indexOf("Dispatch Date")+1,
-      productCol = headers.indexOf("Product name")+1,
-      qtyCol     = headers.indexOf("Quantity")+1,
-      amountCol  = headers.indexOf("Amount")+1,
-      nameCol    = headers.indexOf("Customer Name")+1,
-      phoneCol   = headers.indexOf("Phone Number")+1;
+      parcelCol  = findHeader(headers, "Parcel number"),
+      statusCol  = findHeader(headers, "Shipping Status"),
+      dateCol    = findHeader(headers, "Dispatch Date"),
+      productCol = findHeader(headers, "Product name"),
+      qtyCol     = findHeader(headers, "Quantity"),
+      amountCol  = findHeader(headers, "Amount"),
+      nameCol    = findHeader(headers, "Customer Name"),
+      phoneCol   = findHeader(headers, "Phone Number");
 
   if (!parcelCol) return 'ParcelColNotFound';
 
@@ -451,13 +465,13 @@ function processParcelConfirmReturn(scannedValue) {
       sheet   = ss.getSheetByName("Sheet1");
   if (!sheet) return 'SheetNotFound';
   var headers = sheet.getRange(1,1,1,sheet.getLastColumn()).getValues()[0],
-      parcelCol  = headers.indexOf("Parcel number")+1,
-      statusCol  = headers.indexOf("Shipping Status")+1,
-      dateCol    = headers.indexOf("Dispatch Date")+1,
-      productCol = headers.indexOf("Product name")+1,
-      qtyCol     = headers.indexOf("Quantity")+1,
-      amountCol  = headers.indexOf("Amount")+1;
-      orderCol   = headers.indexOf("Order Number")+1;
+      parcelCol  = findHeader(headers, "Parcel number"),
+      statusCol  = findHeader(headers, "Shipping Status"),
+      dateCol    = findHeader(headers, "Dispatch Date"),
+      productCol = findHeader(headers, "Product name"),
+      qtyCol     = findHeader(headers, "Quantity"),
+      amountCol  = findHeader(headers, "Amount");
+      orderCol   = findHeader(headers, "Order Number");
 
   if (!parcelCol) return 'ParcelColNotFound';
 
@@ -520,12 +534,12 @@ function processParcelConfirmDuplicate(scannedValue) {
       sheet   = ss.getSheetByName("Sheet1");
   if (!sheet) return 'SheetNotFound';
   var headers = sheet.getRange(1,1,1,sheet.getLastColumn()).getValues()[0],
-      parcelCol  = headers.indexOf("Parcel number")+1,
-      statusCol  = headers.indexOf("Shipping Status")+1,
-      dateCol    = headers.indexOf("Dispatch Date")+1,
-      productCol = headers.indexOf("Product name")+1,
-      qtyCol     = headers.indexOf("Quantity")+1,
-      amountCol  = headers.indexOf("Amount")+1;
+      parcelCol  = findHeader(headers, "Parcel number"),
+      statusCol  = findHeader(headers, "Shipping Status"),
+      dateCol    = findHeader(headers, "Dispatch Date"),
+      productCol = findHeader(headers, "Product name"),
+      qtyCol     = findHeader(headers, "Quantity"),
+      amountCol  = findHeader(headers, "Amount");
 
   if (!parcelCol) return 'ParcelColNotFound';
 
@@ -586,8 +600,8 @@ function undoLastScan() {
       sheet   = ss.getSheetByName("Sheet1");
   if (!sheet) return 'SheetNotFound';
   var headers = sheet.getRange(1,1,1,sheet.getLastColumn()).getValues()[0],
-      statusCol = headers.indexOf("Shipping Status")+1,
-      dateCol   = headers.indexOf("Dispatch Date")+1;
+      statusCol = findHeader(headers, "Shipping Status"),
+      dateCol   = findHeader(headers, "Dispatch Date");
 
   // revert Sheet1
   sheet.getRange(act.row, statusCol).setValue(act.oldStatus||'');
@@ -1062,10 +1076,10 @@ function cancelOrderByCustomer(parcelNumberRaw) {
   if (!sheet) return 'SheetNotFound';
   var head   = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
 
-  var parcelCol = head.indexOf("Parcel number") + 1;
-  var statusCol = head.indexOf("Shipping Status") + 1;
-  var dateCol   = head.indexOf("Dispatch Date") + 1;
-  var orderCol  = head.indexOf("Order Number") + 1;
+  var parcelCol = findHeader(head, "Parcel number");
+  var statusCol = findHeader(head, "Shipping Status");
+  var dateCol   = findHeader(head, "Dispatch Date");
+  var orderCol  = findHeader(head, "Order Number");
 
   if (!parcelCol || !statusCol || !orderCol) return 'MissingHeaders';
 
@@ -1114,9 +1128,9 @@ function cancelOrderByNumber(orderNumRaw) {
   if (!sheet) return 'SheetNotFound';
   var head  = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
 
-  var orderCol  = head.indexOf("Order Number") + 1;
-  var statusCol = head.indexOf("Shipping Status") + 1;
-  var dateCol   = head.indexOf("Dispatch Date") + 1;
+  var orderCol  = findHeader(head, "Order Number");
+  var statusCol = findHeader(head, "Shipping Status");
+  var dateCol   = findHeader(head, "Dispatch Date");
 
   if (!orderCol || !statusCol || !dateCol) return 'MissingHeaders';
 
@@ -1170,13 +1184,13 @@ function manualSetStatus(parcelRaw, newStatus, dateStr) {
   if (!sheet) return 'SheetNotFound';
   var head   = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
 
-  var parcelCol  = head.indexOf("Parcel number") + 1;
-  var statusCol  = head.indexOf("Shipping Status") + 1;
-  var dateCol    = head.indexOf("Dispatch Date") + 1;
-  var productCol = head.indexOf("Product name") + 1;
-  var qtyCol     = head.indexOf("Quantity") + 1;
-  var amountCol  = head.indexOf("Amount") + 1;
-  var orderCol   = head.indexOf("Order Number") + 1;
+  var parcelCol  = findHeader(head, "Parcel number");
+  var statusCol  = findHeader(head, "Shipping Status");
+  var dateCol    = findHeader(head, "Dispatch Date");
+  var productCol = findHeader(head, "Product name");
+  var qtyCol     = findHeader(head, "Quantity");
+  var amountCol  = findHeader(head, "Amount");
+  var orderCol   = findHeader(head, "Order Number");
 
   if (!parcelCol || !statusCol || !dateCol) return 'MissingHeaders';
 
@@ -1319,12 +1333,12 @@ function reconcileCODPayments() {
   const paidRows = new Set();
 
   const headers = orderData[0];
-  const parcelCol = headers.indexOf('Parcel number');
-  let statusCol = headers.indexOf('Shipping Status');
-  if (statusCol < 0) statusCol = headers.indexOf('Status');
-  const deliveryCol = headers.indexOf('Delivery Status');
-  const orderCol = headers.indexOf('Order Number');
-  const amountCol = headers.indexOf('Amount');
+  const parcelCol = findHeaderIndex(headers, 'Parcel number');
+  let statusCol = findHeaderIndex(headers, 'Shipping Status');
+  if (statusCol < 0) statusCol = findHeaderIndex(headers, 'Status');
+  const deliveryCol = findHeaderIndex(headers, 'Delivery Status');
+  const orderCol = findHeaderIndex(headers, 'Order Number');
+  const amountCol = findHeaderIndex(headers, 'Amount');
   const resultCol = 13; // Column N (0-based)
 
   const orderMap = {};
