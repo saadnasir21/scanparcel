@@ -76,6 +76,41 @@ function invalidateCustomerIndex() {
   CacheService.getDocumentCache().remove(CUSTOMER_INDEX_KEY);
 }
 
+function removeFromCustomerIndex(row, name, phone) {
+  var cache = CacheService.getDocumentCache();
+  var raw = cache.get(CUSTOMER_INDEX_KEY);
+  if (!raw) return;
+  var idx = JSON.parse(raw);
+  var keyName  = name  ? String(name).trim().toUpperCase() : '';
+  var keyPhone = phone ? String(phone).trim() : '';
+  if (keyName && idx.names[keyName]) {
+    idx.names[keyName] = idx.names[keyName].filter(function(r){ return r !== row; });
+    if (!idx.names[keyName].length) delete idx.names[keyName];
+  }
+  if (keyPhone && idx.phones[keyPhone]) {
+    idx.phones[keyPhone] = idx.phones[keyPhone].filter(function(r){ return r !== row; });
+    if (!idx.phones[keyPhone].length) delete idx.phones[keyPhone];
+  }
+  cache.put(CUSTOMER_INDEX_KEY, JSON.stringify(idx), PARCEL_CACHE_TTL);
+}
+
+function addToCustomerIndex(row, name, phone) {
+  var cache = CacheService.getDocumentCache();
+  var raw = cache.get(CUSTOMER_INDEX_KEY);
+  var idx = raw ? JSON.parse(raw) : { names: {}, phones: {} };
+  var keyName  = name  ? String(name).trim().toUpperCase() : '';
+  var keyPhone = phone ? String(phone).trim() : '';
+  if (keyName) {
+    if (!idx.names[keyName]) idx.names[keyName] = [];
+    if (idx.names[keyName].indexOf(row) === -1) idx.names[keyName].push(row);
+  }
+  if (keyPhone) {
+    if (!idx.phones[keyPhone]) idx.phones[keyPhone] = [];
+    if (idx.phones[keyPhone].indexOf(row) === -1) idx.phones[keyPhone].push(row);
+  }
+  cache.put(CUSTOMER_INDEX_KEY, JSON.stringify(idx), PARCEL_CACHE_TTL);
+}
+
 // ----- summary sheet caches -----
 function dateKey(d) {
   var t = d instanceof Date ? d : new Date(d);
@@ -385,9 +420,9 @@ function processParcelScan(scannedValue) {
 
   // check for other orders by same customer using cached index
   var dupFound = false;
+  var custName = nameCol ? rowData[nameCol-1] : '';
+  var phone    = phoneCol ? rowData[phoneCol-1] : '';
   if (nameCol || phoneCol) {
-    var custName = nameCol ? rowData[nameCol-1] : '';
-    var phone    = phoneCol ? rowData[phoneCol-1] : '';
     if (custName || phone) {
       var idx = getCustomerIndex(sheet, nameCol, phoneCol, statusCol);
       var keyName = custName ? custName.trim().toUpperCase() : '';
@@ -410,7 +445,7 @@ function processParcelScan(scannedValue) {
 
   // write new
   sheet.getRange(foundRow,statusCol).setValue(newStatus);
-  invalidateCustomerIndex();
+  removeFromCustomerIndex(foundRow, custName, phone);
   var now = new Date(),
       todayMid = new Date(now.getFullYear(),now.getMonth(),now.getDate());
   sheet.getRange(foundRow,dateCol).setValue(todayMid);
@@ -456,7 +491,9 @@ function processParcelConfirmReturn(scannedValue) {
       dateCol    = headers.indexOf("Dispatch Date")+1,
       productCol = headers.indexOf("Product name")+1,
       qtyCol     = headers.indexOf("Quantity")+1,
-      amountCol  = headers.indexOf("Amount")+1;
+      amountCol  = headers.indexOf("Amount")+1,
+      nameCol    = headers.indexOf("Customer Name")+1,
+      phoneCol   = headers.indexOf("Phone Number")+1,
       orderCol   = headers.indexOf("Order Number")+1;
 
   if (!parcelCol) return 'ParcelColNotFound';
@@ -474,10 +511,12 @@ function processParcelConfirmReturn(scannedValue) {
   var rowData   = sheet.getRange(foundRow,1,1,sheet.getLastColumn()).getValues()[0],
       oldStatus = rowData[statusCol-1],
       oldDate   = rowData[dateCol-1];
+  var custName = nameCol ? rowData[nameCol-1] : '';
+  var phone    = phoneCol ? rowData[phoneCol-1] : '';
 
   // write Returned
   sheet.getRange(foundRow,statusCol).setValue('Returned');
-  invalidateCustomerIndex();
+  removeFromCustomerIndex(foundRow, custName, phone);
   var now = new Date(),
       todayMid = new Date(now.getFullYear(),now.getMonth(),now.getDate());
   sheet.getRange(foundRow,dateCol).setValue(todayMid);
@@ -525,7 +564,9 @@ function processParcelConfirmDuplicate(scannedValue) {
       dateCol    = headers.indexOf("Dispatch Date")+1,
       productCol = headers.indexOf("Product name")+1,
       qtyCol     = headers.indexOf("Quantity")+1,
-      amountCol  = headers.indexOf("Amount")+1;
+      amountCol  = headers.indexOf("Amount")+1,
+      nameCol    = headers.indexOf("Customer Name")+1,
+      phoneCol   = headers.indexOf("Phone Number")+1;
 
   if (!parcelCol) return 'ParcelColNotFound';
 
@@ -540,17 +581,19 @@ function processParcelConfirmDuplicate(scannedValue) {
 
   var rowData   = sheet.getRange(foundRow,1,1,sheet.getLastColumn()).getValues()[0],
       oldStatus = statusCol ? rowData[statusCol-1] : '',
-      oldDate   = dateCol   ? rowData[dateCol-1] : null;
-    if (String(oldStatus).trim() === "Cancelled by Customer") {
-        return "WasCancelled";
-    }
+      oldDate   = dateCol   ? rowData[dateCol-1] : null,
+      custName  = nameCol ? rowData[nameCol-1] : '',
+      phone     = phoneCol ? rowData[phoneCol-1] : '';
+  if (String(oldStatus).trim() === "Cancelled by Customer") {
+    return "WasCancelled";
+  }
 
   if (oldStatus==='Dispatched' || oldStatus==='Returned') {
     return oldStatus==='Dispatched' ? 'confirmReturn' : 'AlreadyReturned';
   }
 
   sheet.getRange(foundRow,statusCol).setValue('Dispatched');
-  invalidateCustomerIndex();
+  removeFromCustomerIndex(foundRow, custName, phone);
   var now = new Date(), todayMid = new Date(now.getFullYear(),now.getMonth(),now.getDate());
   sheet.getRange(foundRow,dateCol).setValue(todayMid);
 
@@ -587,7 +630,9 @@ function undoLastScan() {
   if (!sheet) return 'SheetNotFound';
   var headers = sheet.getRange(1,1,1,sheet.getLastColumn()).getValues()[0],
       statusCol = headers.indexOf("Shipping Status")+1,
-      dateCol   = headers.indexOf("Dispatch Date")+1;
+      dateCol   = headers.indexOf("Dispatch Date")+1,
+      nameCol   = headers.indexOf("Customer Name")+1,
+      phoneCol  = headers.indexOf("Phone Number")+1;
 
   // revert Sheet1
   sheet.getRange(act.row, statusCol).setValue(act.oldStatus||'');
@@ -595,6 +640,16 @@ function undoLastScan() {
     sheet.getRange(act.row, dateCol).setValue(new Date(act.oldDate));
   } else {
     sheet.getRange(act.row, dateCol).clearContent();
+  }
+
+  // update customer index
+  var rowData = sheet.getRange(act.row, 1, 1, sheet.getLastColumn()).getValues()[0];
+  var custName = nameCol ? rowData[nameCol-1] : '';
+  var phone    = phoneCol ? rowData[phoneCol-1] : '';
+  if (act.oldStatus === 'Dispatched' || act.oldStatus === 'Returned') {
+    removeFromCustomerIndex(act.row, custName, phone);
+  } else {
+    addToCustomerIndex(act.row, custName, phone);
   }
 
   // reverse summaries
@@ -1176,6 +1231,8 @@ function manualSetStatus(parcelRaw, newStatus, dateStr) {
   var productCol = head.indexOf("Product name") + 1;
   var qtyCol     = head.indexOf("Quantity") + 1;
   var amountCol  = head.indexOf("Amount") + 1;
+  var nameCol    = head.indexOf("Customer Name") + 1;
+  var phoneCol   = head.indexOf("Phone Number") + 1;
   var orderCol   = head.indexOf("Order Number") + 1;
 
   if (!parcelCol || !statusCol || !dateCol) return 'MissingHeaders';
@@ -1194,6 +1251,8 @@ function manualSetStatus(parcelRaw, newStatus, dateStr) {
   var oldStatus = rowData[statusCol - 1];
   var oldDate   = rowData[dateCol - 1];
   var orderNum  = orderCol ? rowData[orderCol - 1] : '';
+  var custName  = nameCol ? rowData[nameCol - 1] : '';
+  var phone     = phoneCol ? rowData[phoneCol - 1] : '';
 
   if (String(oldStatus).trim() === 'Cancelled by Customer' && newStatus === 'Dispatched') {
     return 'WasCancelled';
@@ -1222,7 +1281,11 @@ function manualSetStatus(parcelRaw, newStatus, dateStr) {
   // write new status/date
   sheet.getRange(foundRow, statusCol).setValue(newStatus);
   sheet.getRange(foundRow, dateCol).setValue(dateObj);
-  invalidateCustomerIndex();
+  if (newStatus === 'Dispatched' || newStatus === 'Returned') {
+    removeFromCustomerIndex(foundRow, custName, phone);
+  } else {
+    addToCustomerIndex(foundRow, custName, phone);
+  }
 
   // add new summary data if needed
   if (newStatus === 'Dispatched' || newStatus === 'Dispatch through Bykea') {
