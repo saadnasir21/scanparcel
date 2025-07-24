@@ -20,6 +20,7 @@ var RETURN_DAY_INDEX_KEY     = 'returnDayIndex';
 var SUMMARY_CACHE_TTL        = 24 * 60 * 60; // seconds
 
 function getParcelIndex(sheet, parcelCol) {
+  if (!sheet) return {};
   var cache = CacheService.getDocumentCache();
   var raw = cache.get(PARCEL_INDEX_KEY);
   if (raw) return JSON.parse(raw);
@@ -339,8 +340,9 @@ function processParcelScan(scannedValue) {
   if (!scannedValue) return 'Empty';
 
   var ss      = SpreadsheetApp.getActiveSpreadsheet(),
-      sheet   = ss.getSheetByName("Sheet1"),
-      headers = sheet.getRange(1,1,1,sheet.getLastColumn()).getValues()[0],
+      sheet   = ss.getSheetByName("Sheet1");
+  if (!sheet) return 'SheetNotFound';
+  var headers = sheet.getRange(1,1,1,sheet.getLastColumn()).getValues()[0],
       parcelCol  = headers.indexOf("Parcel number")+1,
       statusCol  = headers.indexOf("Shipping Status")+1,
       dateCol    = headers.indexOf("Dispatch Date")+1,
@@ -446,8 +448,9 @@ function processParcelConfirmReturn(scannedValue) {
   if (!scannedValue) return 'Empty';
 
   var ss      = SpreadsheetApp.getActiveSpreadsheet(),
-      sheet   = ss.getSheetByName("Sheet1"),
-      headers = sheet.getRange(1,1,1,sheet.getLastColumn()).getValues()[0],
+      sheet   = ss.getSheetByName("Sheet1");
+  if (!sheet) return 'SheetNotFound';
+  var headers = sheet.getRange(1,1,1,sheet.getLastColumn()).getValues()[0],
       parcelCol  = headers.indexOf("Parcel number")+1,
       statusCol  = headers.indexOf("Shipping Status")+1,
       dateCol    = headers.indexOf("Dispatch Date")+1,
@@ -514,8 +517,9 @@ function processParcelConfirmDuplicate(scannedValue) {
   if (!scannedValue) return 'Empty';
 
   var ss      = SpreadsheetApp.getActiveSpreadsheet(),
-      sheet   = ss.getSheetByName("Sheet1"),
-      headers = sheet.getRange(1,1,1,sheet.getLastColumn()).getValues()[0],
+      sheet   = ss.getSheetByName("Sheet1");
+  if (!sheet) return 'SheetNotFound';
+  var headers = sheet.getRange(1,1,1,sheet.getLastColumn()).getValues()[0],
       parcelCol  = headers.indexOf("Parcel number")+1,
       statusCol  = headers.indexOf("Shipping Status")+1,
       dateCol    = headers.indexOf("Dispatch Date")+1,
@@ -579,8 +583,9 @@ function undoLastScan() {
   var act = JSON.parse(raw);
 
   var ss      = SpreadsheetApp.getActiveSpreadsheet(),
-      sheet   = ss.getSheetByName("Sheet1"),
-      headers = sheet.getRange(1,1,1,sheet.getLastColumn()).getValues()[0],
+      sheet   = ss.getSheetByName("Sheet1");
+  if (!sheet) return 'SheetNotFound';
+  var headers = sheet.getRange(1,1,1,sheet.getLastColumn()).getValues()[0],
       statusCol = headers.indexOf("Shipping Status")+1,
       dateCol   = headers.indexOf("Dispatch Date")+1;
 
@@ -1054,6 +1059,7 @@ function cancelOrderByCustomer(parcelNumberRaw) {
 
   var ss     = SpreadsheetApp.getActiveSpreadsheet();
   var sheet  = ss.getSheetByName("Sheet1");
+  if (!sheet) return 'SheetNotFound';
   var head   = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
 
   var parcelCol = head.indexOf("Parcel number") + 1;
@@ -1105,6 +1111,7 @@ function cancelOrderByNumber(orderNumRaw) {
 
   var ss    = SpreadsheetApp.getActiveSpreadsheet();
   var sheet = ss.getSheetByName("Sheet1");
+  if (!sheet) return 'SheetNotFound';
   var head  = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
 
   var orderCol  = head.indexOf("Order Number") + 1;
@@ -1160,6 +1167,7 @@ function manualSetStatus(parcelRaw, newStatus, dateStr) {
 
   var ss     = SpreadsheetApp.getActiveSpreadsheet();
   var sheet  = ss.getSheetByName("Sheet1");
+  if (!sheet) return 'SheetNotFound';
   var head   = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
 
   var parcelCol  = head.indexOf("Parcel number") + 1;
