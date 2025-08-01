@@ -6,6 +6,9 @@ var PARCEL_INDEX_KEY = 'parcelIndex';
 // cache parcel lookups for a full day to avoid rebuilding the index
 var PARCEL_CACHE_TTL = 24 * 60 * 60; // seconds
 
+// maximum size of a cache entry in bytes
+var CACHE_MAX_BYTES = 100 * 1024;
+
 // disable row highlighting to speed up large batch scans
 var HIGHLIGHT_ROWS = false;
 
@@ -25,19 +28,62 @@ function getParcelIndex(sheet, parcelCol) {
   var raw = cache.get(PARCEL_INDEX_KEY);
   if (raw) return JSON.parse(raw);
 
+  // check for chunked cache pieces
+  var combined = {};
+  var letters = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+  for (var i = 0; i < letters.length; i++) {
+    var part = cache.get(PARCEL_INDEX_KEY + ':' + letters[i]);
+    if (part) {
+      Object.assign(combined, JSON.parse(part));
+    }
+  }
+  if (Object.keys(combined).length) return combined;
+
   var last = sheet.getLastRow();
   var values = sheet.getRange(2, parcelCol, Math.max(last - 1, 0), 1).getValues();
   var map = {};
-  for (var i = 0; i < values.length; i++) {
-    var key = String(values[i][0]).replace(/\s+/g, '').toUpperCase();
-    if (key) map[key] = i + 2; // adjust for header row
+  for (var j = 0; j < values.length; j++) {
+    var key = String(values[j][0]).replace(/\s+/g, '').toUpperCase();
+    if (key) map[key] = j + 2; // adjust for header row
   }
-  cache.put(PARCEL_INDEX_KEY, JSON.stringify(map), PARCEL_CACHE_TTL);
+
+  var json = JSON.stringify(map);
+  var byteLen = Utilities.newBlob(json).getBytes().length;
+  if (byteLen <= CACHE_MAX_BYTES) {
+    cache.put(PARCEL_INDEX_KEY, json, PARCEL_CACHE_TTL);
+  } else {
+    // split map into chunks by first character
+    var buckets = {};
+    Object.keys(map).forEach(function(k) {
+      var ch = k.charAt(0);
+      if (!buckets[ch]) buckets[ch] = {};
+      buckets[ch][k] = map[k];
+    });
+    var skipped = false;
+    for (var ch in buckets) {
+      var chunkJson = JSON.stringify(buckets[ch]);
+      var chunkLen = Utilities.newBlob(chunkJson).getBytes().length;
+      if (chunkLen <= CACHE_MAX_BYTES) {
+        cache.put(PARCEL_INDEX_KEY + ':' + ch, chunkJson, PARCEL_CACHE_TTL);
+      } else {
+        Logger.log('Parcel index chunk for ' + ch + ' exceeded cache size; skipping cache for this chunk.');
+        skipped = true;
+      }
+    }
+    if (skipped) {
+      Logger.log('Parcel index exceeded cache size; some chunks were not cached.');
+    }
+  }
   return map;
 }
 
 function invalidateParcelIndex() {
-  CacheService.getDocumentCache().remove(PARCEL_INDEX_KEY);
+  var cache = CacheService.getDocumentCache();
+  cache.remove(PARCEL_INDEX_KEY);
+  var letters = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+  for (var i = 0; i < letters.length; i++) {
+    cache.remove(PARCEL_INDEX_KEY + ':' + letters[i]);
+  }
 }
 
 function getCustomerIndex(sheet, nameCol, phoneCol, statusCol) {
@@ -68,7 +114,13 @@ function getCustomerIndex(sheet, nameCol, phoneCol, statusCol) {
     }
   }
   var idx = { names: names, phones: phones };
-  cache.put(CUSTOMER_INDEX_KEY, JSON.stringify(idx), PARCEL_CACHE_TTL);
+  var json = JSON.stringify(idx);
+  var byteLen = Utilities.newBlob(json).getBytes().length;
+  if (byteLen <= CACHE_MAX_BYTES) {
+    cache.put(CUSTOMER_INDEX_KEY, json, PARCEL_CACHE_TTL);
+  } else {
+    Logger.log('Customer index size ' + byteLen + ' exceeds cache limit; caching skipped.');
+  }
   return idx;
 }
 
