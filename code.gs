@@ -182,7 +182,13 @@ function getDispatchProdIndex(sheet) {
     var k = dateKey(values[i][0]) + '|' + values[i][1];
     map[k] = i + 2;
   }
-  cache.put(DISPATCH_PROD_INDEX_KEY, JSON.stringify(map), SUMMARY_CACHE_TTL);
+  var json = JSON.stringify(map);
+  var byteLen = Utilities.newBlob(json).getBytes().length;
+  if (byteLen <= CACHE_MAX_BYTES) {
+    cache.put(DISPATCH_PROD_INDEX_KEY, json, SUMMARY_CACHE_TTL);
+  } else {
+    Logger.log('Dispatch product index size ' + byteLen + ' exceeds cache limit; caching skipped.');
+  }
   return map;
 }
 
@@ -196,7 +202,13 @@ function getDispatchDayIndex(sheet) {
   for (var i = 0; i < values.length; i++) {
     map[dateKey(values[i][0])] = i + 2;
   }
-  cache.put(DISPATCH_DAY_INDEX_KEY, JSON.stringify(map), SUMMARY_CACHE_TTL);
+  var json2 = JSON.stringify(map);
+  var byteLen2 = Utilities.newBlob(json2).getBytes().length;
+  if (byteLen2 <= CACHE_MAX_BYTES) {
+    cache.put(DISPATCH_DAY_INDEX_KEY, json2, SUMMARY_CACHE_TTL);
+  } else {
+    Logger.log('Dispatch day index size ' + byteLen2 + ' exceeds cache limit; caching skipped.');
+  }
   return map;
 }
 
@@ -211,7 +223,13 @@ function getReturnProdIndex(sheet) {
     var k = dateKey(values[i][0]) + '|' + values[i][1];
     map[k] = i + 2;
   }
-  cache.put(RETURN_PROD_INDEX_KEY, JSON.stringify(map), SUMMARY_CACHE_TTL);
+  var json3 = JSON.stringify(map);
+  var byteLen3 = Utilities.newBlob(json3).getBytes().length;
+  if (byteLen3 <= CACHE_MAX_BYTES) {
+    cache.put(RETURN_PROD_INDEX_KEY, json3, SUMMARY_CACHE_TTL);
+  } else {
+    Logger.log('Return product index size ' + byteLen3 + ' exceeds cache limit; caching skipped.');
+  }
   return map;
 }
 
@@ -225,7 +243,13 @@ function getReturnDayIndex(sheet) {
   for (var i = 0; i < values.length; i++) {
     map[dateKey(values[i][0])] = i + 2;
   }
-  cache.put(RETURN_DAY_INDEX_KEY, JSON.stringify(map), SUMMARY_CACHE_TTL);
+  var json4 = JSON.stringify(map);
+  var byteLen4 = Utilities.newBlob(json4).getBytes().length;
+  if (byteLen4 <= CACHE_MAX_BYTES) {
+    cache.put(RETURN_DAY_INDEX_KEY, json4, SUMMARY_CACHE_TTL);
+  } else {
+    Logger.log('Return day index size ' + byteLen4 + ' exceeds cache limit; caching skipped.');
+  }
   return map;
 }
 
