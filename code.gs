@@ -12,6 +12,22 @@ var CACHE_MAX_BYTES = 100 * 1024;
 // disable row highlighting to speed up large batch scans
 var HIGHLIGHT_ROWS = false;
 
+// fetch column positions directly from the header row
+function getColumnIndexes(sheet) {
+  var headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+  return {
+    parcelCol:  headers.indexOf('Parcel number') + 1,
+    statusCol:  headers.indexOf('Shipping Status') + 1,
+    dateCol:    headers.indexOf('Dispatch Date') + 1,
+    productCol: headers.indexOf('Product name') + 1,
+    qtyCol:     headers.indexOf('Quantity') + 1,
+    amountCol:  headers.indexOf('Amount') + 1,
+    nameCol:    headers.indexOf('Customer Name') + 1,
+    phoneCol:   headers.indexOf('Phone Number') + 1,
+    orderCol:   headers.indexOf('Order Number') + 1
+  };
+}
+
 // cache customer info for duplicate checks
 var CUSTOMER_INDEX_KEY = 'customerIndex';
 
@@ -314,13 +330,13 @@ function onEdit(e) {
   invalidateParcelIndex();
   invalidateCustomerIndex();
 
-  var head = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
-  var statusCol  = head.indexOf('Shipping Status') + 1;
-  var dateCol    = head.indexOf('Dispatch Date') + 1;
-  var productCol = head.indexOf('Product name') + 1;
-  var qtyCol     = head.indexOf('Quantity') + 1;
-  var amountCol  = head.indexOf('Amount') + 1;
-  var orderCol   = head.indexOf('Order Number') + 1;
+  var cols = getColumnIndexes(sheet);
+  var statusCol  = cols.statusCol;
+  var dateCol    = cols.dateCol;
+  var productCol = cols.productCol;
+  var qtyCol     = cols.qtyCol;
+  var amountCol  = cols.amountCol;
+  var orderCol   = cols.orderCol;
 
   if (!statusCol || !dateCol) return;
   if (range.getColumn() !== statusCol || range.getRow() === 1) return;
@@ -383,18 +399,18 @@ function processParcelScan(scannedValue) {
   scannedValue = String(scannedValue || '').trim().replace(/\s+/g, '');
   if (!scannedValue) return 'Empty';
 
-  var ss      = SpreadsheetApp.getActiveSpreadsheet(),
-      sheet   = ss.getSheetByName("Sheet1");
+  var ss    = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName('Sheet1');
   if (!sheet) return 'SheetNotFound';
-  var headers = sheet.getRange(1,1,1,sheet.getLastColumn()).getValues()[0],
-      parcelCol  = headers.indexOf("Parcel number")+1,
-      statusCol  = headers.indexOf("Shipping Status")+1,
-      dateCol    = headers.indexOf("Dispatch Date")+1,
-      productCol = headers.indexOf("Product name")+1,
-      qtyCol     = headers.indexOf("Quantity")+1,
-      amountCol  = headers.indexOf("Amount")+1,
-      nameCol    = headers.indexOf("Customer Name")+1,
-      phoneCol   = headers.indexOf("Phone Number")+1;
+  var cols = getColumnIndexes(sheet);
+  var parcelCol  = cols.parcelCol,
+      statusCol  = cols.statusCol,
+      dateCol    = cols.dateCol,
+      productCol = cols.productCol,
+      qtyCol     = cols.qtyCol,
+      amountCol  = cols.amountCol,
+      nameCol    = cols.nameCol,
+      phoneCol   = cols.phoneCol;
 
   if (!parcelCol) return 'ParcelColNotFound';
 
@@ -487,19 +503,19 @@ function processParcelConfirmReturn(scannedValue) {
   scannedValue = String(scannedValue || '').trim().replace(/\s+/g,'');
   if (!scannedValue) return 'Empty';
 
-  var ss      = SpreadsheetApp.getActiveSpreadsheet(),
-      sheet   = ss.getSheetByName("Sheet1");
+  var ss    = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName('Sheet1');
   if (!sheet) return 'SheetNotFound';
-  var headers = sheet.getRange(1,1,1,sheet.getLastColumn()).getValues()[0],
-      parcelCol  = headers.indexOf("Parcel number")+1,
-      statusCol  = headers.indexOf("Shipping Status")+1,
-      dateCol    = headers.indexOf("Dispatch Date")+1,
-      productCol = headers.indexOf("Product name")+1,
-      qtyCol     = headers.indexOf("Quantity")+1,
-      amountCol  = headers.indexOf("Amount")+1,
-      nameCol    = headers.indexOf("Customer Name")+1,
-      phoneCol   = headers.indexOf("Phone Number")+1,
-      orderCol   = headers.indexOf("Order Number")+1;
+  var cols = getColumnIndexes(sheet);
+  var parcelCol  = cols.parcelCol,
+      statusCol  = cols.statusCol,
+      dateCol    = cols.dateCol,
+      productCol = cols.productCol,
+      qtyCol     = cols.qtyCol,
+      amountCol  = cols.amountCol,
+      nameCol    = cols.nameCol,
+      phoneCol   = cols.phoneCol,
+      orderCol   = cols.orderCol;
 
   if (!parcelCol) return 'ParcelColNotFound';
 
@@ -559,18 +575,18 @@ function processParcelConfirmDuplicate(scannedValue) {
   scannedValue = String(scannedValue || '').trim().replace(/\s+/g,'');
   if (!scannedValue) return 'Empty';
 
-  var ss      = SpreadsheetApp.getActiveSpreadsheet(),
-      sheet   = ss.getSheetByName("Sheet1");
+  var ss    = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName('Sheet1');
   if (!sheet) return 'SheetNotFound';
-  var headers = sheet.getRange(1,1,1,sheet.getLastColumn()).getValues()[0],
-      parcelCol  = headers.indexOf("Parcel number")+1,
-      statusCol  = headers.indexOf("Shipping Status")+1,
-      dateCol    = headers.indexOf("Dispatch Date")+1,
-      productCol = headers.indexOf("Product name")+1,
-      qtyCol     = headers.indexOf("Quantity")+1,
-      amountCol  = headers.indexOf("Amount")+1,
-      nameCol    = headers.indexOf("Customer Name")+1,
-      phoneCol   = headers.indexOf("Phone Number")+1;
+  var cols = getColumnIndexes(sheet);
+  var parcelCol  = cols.parcelCol,
+      statusCol  = cols.statusCol,
+      dateCol    = cols.dateCol,
+      productCol = cols.productCol,
+      qtyCol     = cols.qtyCol,
+      amountCol  = cols.amountCol,
+      nameCol    = cols.nameCol,
+      phoneCol   = cols.phoneCol;
 
   if (!parcelCol) return 'ParcelColNotFound';
 
@@ -626,12 +642,12 @@ function undoLastScan() {
   if (!raw) return 'NoAction';
   var act = JSON.parse(raw);
 
-  var ss      = SpreadsheetApp.getActiveSpreadsheet(),
-      sheet   = ss.getSheetByName("Sheet1");
+  var ss    = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName('Sheet1');
   if (!sheet) return 'SheetNotFound';
-  var headers = sheet.getRange(1,1,1,sheet.getLastColumn()).getValues()[0],
-      statusCol = headers.indexOf("Shipping Status")+1,
-      dateCol   = headers.indexOf("Dispatch Date")+1;
+  var cols = getColumnIndexes(sheet);
+  var statusCol = cols.statusCol,
+      dateCol   = cols.dateCol;
 
   // revert Sheet1
   sheet.getRange(act.row, statusCol).setValue(act.oldStatus||'');
