@@ -20,6 +20,11 @@
         var inp = document.getElementById('parcelInput');
         var code = inp.value.trim();
         if (!code) return;
+
+        // allow immediate next scan
+        document.getElementById('statusMessage').textContent = 'Processing…';
+        resetInput();
+
         google.script.run
           .withSuccessHandler(res=>{
             if (res==='Dispatched')       showMessage('✓ Dispatched');
@@ -47,7 +52,6 @@
             else if (res==='AlreadyReturned') showMessage('⚠️ Already returned');
             else if (res==='NotFound')        showMessage('❌ Not found');
             else showMessage('?? '+res);
-            resetInput();
           })
           .processParcelScan(code);
       }
