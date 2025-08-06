@@ -64,10 +64,6 @@ missing from `Sheet1` are highlighted in yellow so you can easily spot them.
 Invoice rows that correspond to orders marked **Paid ✅** are highlighted in
 light green.
 
-## Dispatch Summary
-
-The **Scanner** menu also provides a **Dispatch Summary** submenu. Choose one of the preset ranges (Last 5 Days, Last Week or Last Month) and a sheet named **Dispatch Summary** will be generated with total quantities grouped by product for the selected period.
-
 ## Local Rider Orders
 
 When the shipping status is set to **Dispatch through Local Rider**, the script now records each order ID and amount in a sheet named **Local Rider Orders**. This sheet lists every local rider dispatch on a daily basis so you can easily reconcile cash payments collected by riders.
