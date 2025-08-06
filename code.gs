@@ -469,12 +469,14 @@ function processParcelScan(scannedValue) {
   if (dupFound) return 'confirmDuplicate';
 
   // write new
-  sheet.getRange(foundRow,statusCol).setValue(newStatus);
+  var now = new Date(),
+      todayMid = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  sheet.getRangeList([
+    sheet.getRange(foundRow, statusCol).getA1Notation(),
+    sheet.getRange(foundRow, dateCol).getA1Notation()
+  ]).setValues([[newStatus], [todayMid]]);
   removeFromCustomerIndex(foundRow, nameCol ? rowData[nameCol-1] : '',
                          phoneCol ? rowData[phoneCol-1] : '');
-  var now = new Date(),
-      todayMid = new Date(now.getFullYear(),now.getMonth(),now.getDate());
-  sheet.getRange(foundRow,dateCol).setValue(todayMid);
 
   // parse products & qty
   var products   = String(rowData[productCol-1]).split('\n').map(s=>s.trim()).filter(Boolean),
@@ -534,12 +536,14 @@ function processParcelConfirmReturn(scannedValue) {
       oldDate   = rowData[dateCol-1];
 
   // write Returned
-  sheet.getRange(foundRow,statusCol).setValue('Returned');
+  var now = new Date(),
+      todayMid = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  sheet.getRangeList([
+    sheet.getRange(foundRow, statusCol).getA1Notation(),
+    sheet.getRange(foundRow, dateCol).getA1Notation()
+  ]).setValues([['Returned'], [todayMid]]);
   removeFromCustomerIndex(foundRow, nameCol ? rowData[nameCol-1] : '',
                          phoneCol ? rowData[phoneCol-1] : '');
-  var now = new Date(),
-      todayMid = new Date(now.getFullYear(),now.getMonth(),now.getDate());
-  sheet.getRange(foundRow,dateCol).setValue(todayMid);
 
   // parse
   var products   = String(rowData[productCol-1]).split('\n').map(s=>s.trim()).filter(Boolean),
@@ -610,11 +614,13 @@ function processParcelConfirmDuplicate(scannedValue) {
     return oldStatus==='Dispatched' ? 'confirmReturn' : 'AlreadyReturned';
   }
 
-  sheet.getRange(foundRow,statusCol).setValue('Dispatched');
+  var now = new Date(), todayMid = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  sheet.getRangeList([
+    sheet.getRange(foundRow, statusCol).getA1Notation(),
+    sheet.getRange(foundRow, dateCol).getA1Notation()
+  ]).setValues([['Dispatched'], [todayMid]]);
   removeFromCustomerIndex(foundRow, nameCol ? rowData[nameCol-1] : '',
                          phoneCol ? rowData[phoneCol-1] : '');
-  var now = new Date(), todayMid = new Date(now.getFullYear(),now.getMonth(),now.getDate());
-  sheet.getRange(foundRow,dateCol).setValue(todayMid);
 
   var products   = String(rowData[productCol-1]).split('\n').map(s=>s.trim()).filter(Boolean),
       quantities = String(rowData[qtyCol-1]).split('\n').map(s=>s.trim()).filter(Boolean),
