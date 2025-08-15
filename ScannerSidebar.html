@@ -9,59 +9,45 @@
     </style>
     <script>
       // show a quick non-blocking message
-      function showMessage(msg, timeout=300) {
-        const div = document.getElementById('statusMessage');
+      function showMessage(msg) {
+        var div = document.getElementById('statusMessage');
         div.textContent = msg;
-        if (timeout) setTimeout(() => div.textContent = '', timeout);
+        setTimeout(()=> div.textContent = '', 1500);
       }
 
       // scan handler
       function submitScan() {
-        const inp = document.getElementById('parcelInput');
-        const code = inp.value.trim();
+        var inp = document.getElementById('parcelInput');
+        var code = inp.value.trim();
         if (!code) return;
-
-        showMessage('Processing…', 0);
-
         google.script.run
-          .withSuccessHandler(res => {
-            if (res==='Dispatched')       { showMessage('✓ Dispatched'); resetInput(); }
+          .withSuccessHandler(res=>{
+            if (res==='Dispatched')       showMessage('✓ Dispatched');
             else if (res==='confirmReturn') {
+              // confirm before return
               if (confirm('Marked Dispatched — mark as Returned instead?')) {
                 google.script.run
-                  .withSuccessHandler(r2 => {
+                  .withSuccessHandler(r2=>{
                     showMessage(r2==='Returned'? '↺ Returned' : 'ERR:'+r2);
-                    resetInput();
                   })
-                  .withFailureHandler(err => showMessage('ERR:'+err.message))
                   .processParcelConfirmReturn(code);
-              } else {
-                showMessage('⏎ Skipped');
-                resetInput();
-              }
+              } else showMessage('⏎ Skipped');
             }
             else if (res==='confirmDuplicate') {
-              const msg = 'Multiple orders for this customer. Dispatch anyway?';
+              var msg = 'Multiple orders for this customer. Dispatch anyway?';
               if (confirm(msg)) {
                 google.script.run
-                  .withSuccessHandler(r2 => {
+                  .withSuccessHandler(r2=>{
                     showMessage(r2==='Dispatched'? '✓ Dispatched' : 'ERR:'+r2);
-                    resetInput();
                   })
-                  .withFailureHandler(err => showMessage('ERR:'+err.message))
                   .processParcelConfirmDuplicate(code);
-              } else {
-                showMessage('⏎ Held');
-                resetInput();
-              }
+              } else showMessage('⏎ Held');
             }
-            else if (res==='WasCancelled') { showMessage('⚠️ Order was cancelled'); resetInput(); }
-            else if (res==='AlreadyReturned') { showMessage('⚠️ Already returned'); resetInput(); }
-            else if (res==='NotFound')        { showMessage('❌ Not found'); resetInput(); }
-            else { showMessage('?? '+res); resetInput(); }
-          })
-          .withFailureHandler(err => {
-            showMessage('ERR: '+err.message);
+            else if (res==='WasCancelled') showMessage('⚠️ Order was cancelled');
+            else if (res==='AlreadyReturned') showMessage('⚠️ Already returned');
+            else if (res==='NotFound')        showMessage('❌ Not found');
+            else showMessage('?? '+res);
+            resetInput();
           })
           .processParcelScan(code);
       }
@@ -137,21 +123,18 @@
 
       if (!confirm("Are you sure this order was cancelled by customer?")) return;
 
-      google.script.run
-        .withSuccessHandler(res => {
-          const map = {
-            'Cancelled': '✅ Cancelled & synced to Shopify',
-            'TooLate':   '⚠️ Already dispatched/returned',
-            'NotFound':  '❌ Parcel not found',
-            'OrderNotFoundOnShopify': '🛑 Shopify order not found',
-            'ShopifyFail': '❌ Failed to cancel on Shopify',
-            'MissingHeaders': '⚠️ Check column headers'
-          };
-          showMessage(map[res] || res);
-          resetInput();
-        })
-        .withFailureHandler(err => showMessage('ERR:'+err.message))
-        .cancelOrderByCustomer(code);
+      google.script.run.withSuccessHandler(res => {
+        const map = {
+          'Cancelled': '✅ Cancelled & synced to Shopify',
+          'TooLate':   '⚠️ Already dispatched/returned',
+          'NotFound':  '❌ Parcel not found',
+          'OrderNotFoundOnShopify': '🛑 Shopify order not found',
+          'ShopifyFail': '❌ Failed to cancel on Shopify',
+          'MissingHeaders': '⚠️ Check column headers'
+        };
+        showMessage(map[res] || res);
+        resetInput();
+      }).cancelOrderByCustomer(code);
     }
 
     function cancelByOrderNumber() {
@@ -160,21 +143,18 @@
 
       if (!confirm("Are you sure this order was cancelled by customer?")) return;
 
-      google.script.run
-        .withSuccessHandler(res => {
-          const map = {
-            'Cancelled': '✅ Cancelled & synced to Shopify',
-            'TooLate':   '⚠️ Already dispatched/returned',
-            'NotFound':  '❌ Order not found',
-            'OrderNotFoundOnShopify': '🛑 Shopify order not found',
-            'ShopifyFail': '❌ Failed to cancel on Shopify',
-            'MissingHeaders': '⚠️ Check column headers'
-          };
-          showMessage(map[res] || res);
-          resetInput();
-        })
-        .withFailureHandler(err => showMessage('ERR:'+err.message))
-        .cancelOrderByNumber(code);
+      google.script.run.withSuccessHandler(res => {
+        const map = {
+          'Cancelled': '✅ Cancelled & synced to Shopify',
+          'TooLate':   '⚠️ Already dispatched/returned',
+          'NotFound':  '❌ Order not found',
+          'OrderNotFoundOnShopify': '🛑 Shopify order not found',
+          'ShopifyFail': '❌ Failed to cancel on Shopify',
+          'MissingHeaders': '⚠️ Check column headers'
+        };
+        showMessage(map[res] || res);
+        resetInput();
+      }).cancelOrderByNumber(code);
     }
   </script>
 </body>
