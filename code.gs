@@ -11,8 +11,29 @@ var HIGHLIGHT_ROWS = false;
 
 function getParcelIndex(sheet, parcelCol) {
   var cache = CacheService.getDocumentCache();
+
+  // attempt to load a single cached map first
   var raw = cache.get(PARCEL_INDEX_KEY);
   if (raw) return JSON.parse(raw);
+
+  // check for split caches
+  var prefixesRaw = cache.get(PARCEL_INDEX_KEY + '_prefixes');
+  if (prefixesRaw) {
+    try {
+      var prefixes = JSON.parse(prefixesRaw);
+      var merged = {};
+      for (var i = 0; i < prefixes.length; i++) {
+        var part = cache.get(PARCEL_INDEX_KEY + '_' + prefixes[i]);
+        if (part) {
+          var obj = JSON.parse(part);
+          for (var k in obj) merged[k] = obj[k];
+        }
+      }
+      if (Object.keys(merged).length) return merged;
+    } catch (err) {
+      Logger.log('Parcel index cache read failed: ' + err);
+    }
+  }
 
   var last = sheet.getLastRow();
   var values = sheet.getRange(2, parcelCol, Math.max(last - 1, 0), 1).getValues();
@@ -21,12 +42,58 @@ function getParcelIndex(sheet, parcelCol) {
     var key = String(values[i][0]).replace(/\s+/g, '').toUpperCase();
     if (key) map[key] = i + 2; // adjust for header row
   }
-  cache.put(PARCEL_INDEX_KEY, JSON.stringify(map), PARCEL_CACHE_TTL);
+
+  var json = JSON.stringify(map);
+  var MAX_BYTES = 90 * 1024; // ~90KB
+
+  try {
+    if (json.length <= MAX_BYTES) {
+      cache.put(PARCEL_INDEX_KEY, json, PARCEL_CACHE_TTL);
+    } else {
+      var groups = {};
+      for (var key in map) {
+        var prefix = key.charAt(0);
+        if (!groups[prefix]) groups[prefix] = {};
+        groups[prefix][key] = map[key];
+      }
+      var stored = [];
+      for (var p in groups) {
+        var subJson = JSON.stringify(groups[p]);
+        if (subJson.length <= MAX_BYTES) {
+          cache.put(PARCEL_INDEX_KEY + '_' + p, subJson, PARCEL_CACHE_TTL);
+          stored.push(p);
+        } else {
+          Logger.log('Parcel index segment too large for prefix ' + p + ': ' + subJson.length);
+        }
+      }
+      if (stored.length) {
+        cache.put(PARCEL_INDEX_KEY + '_prefixes', JSON.stringify(stored), PARCEL_CACHE_TTL);
+      } else {
+        Logger.log('Parcel index too large to cache; skipping. Size: ' + json.length);
+      }
+    }
+  } catch (err) {
+    Logger.log('Parcel index cache write failed: ' + err);
+  }
+
   return map;
 }
 
 function invalidateParcelIndex() {
-  CacheService.getDocumentCache().remove(PARCEL_INDEX_KEY);
+  var cache = CacheService.getDocumentCache();
+  cache.remove(PARCEL_INDEX_KEY);
+  var prefixesRaw = cache.get(PARCEL_INDEX_KEY + '_prefixes');
+  if (prefixesRaw) {
+    try {
+      var prefixes = JSON.parse(prefixesRaw);
+      for (var i = 0; i < prefixes.length; i++) {
+        cache.remove(PARCEL_INDEX_KEY + '_' + prefixes[i]);
+      }
+    } catch (err) {
+      Logger.log('Parcel index invalidation failed: ' + err);
+    }
+    cache.remove(PARCEL_INDEX_KEY + '_prefixes');
+  }
 }
 
 /**
