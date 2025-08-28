@@ -1220,22 +1220,23 @@ function reconcileCODPayments() {
     if (rec) matchedParcels.add(rawParcel);
     const deliveryCell = deliveryCol >= 0 ? orderSheet.getRange(r + 1, deliveryCol + 1) : null;
     const currentResult = String(orderData[r][resultCol] || '').trim();
+    const isAlreadyPaid = currentResult.startsWith('Paid');
     if (currentResult === 'Paid ✅' && deliveryCell) {
       const currentDelivery = String(orderData[r][deliveryCol] || '').toLowerCase();
       if (currentDelivery !== 'delivered') deliveryCell.setValue('Delivered');
       if (rec) paidRows.add(rec.row);
     }
     if (shippingStatus === 'dispatched') {
-      let result = 'Dispatched – No COD ❌';
       if (rec && rec.status === 'delivered' && rec.cod && parseFloat(rec.cod) > 0) {
-        result = 'Paid ✅';
         if (deliveryCell) deliveryCell.setValue('Delivered');
+        orderSheet.getRange(r + 1, resultCol + 1).setValue('Paid ✅');
         paidRows.add(rec.row);
+      } else if (!isAlreadyPaid) {
+        orderSheet.getRange(r + 1, resultCol + 1).setValue('Dispatched – No COD ❌');
       }
-      orderSheet.getRange(r + 1, resultCol + 1).setValue(result);
     } else if (!shippingStatus && rec && rec.status === 'delivered' && rec.cod && parseFloat(rec.cod) > 0) {
       if (deliveryCell) deliveryCell.setValue('Delivered');
-      orderSheet.getRange(r + 1, resultCol + 1).setValue('Paid ✅');
+      if (!isAlreadyPaid) orderSheet.getRange(r + 1, resultCol + 1).setValue('Paid ✅');
       paidRows.add(rec.row);
     }
   }
