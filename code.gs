@@ -1184,7 +1184,11 @@ function reconcileCODPayments() {
     if (!cleaned) continue;
     const status = String(invoiceData[i][statusIdx]).toLowerCase();
     const entry = invoiceMap[cleaned];
-    if (!entry || status === 'delivered' || (entry.status !== 'delivered' && i > entry.row)) {
+    const shouldReplace =
+      !entry ||
+      i > entry.row ||
+      (status === 'delivered' && entry.status !== 'delivered');
+    if (shouldReplace) {
       invoiceMap[cleaned] = {
         cod: invoiceData[i][codIdx],
         status: status,
@@ -1222,8 +1226,10 @@ function reconcileCODPayments() {
     const currentResult = String(orderData[r][resultCol] || '').trim();
     if (currentResult === 'Paid ✅' && deliveryCell) {
       const currentDelivery = String(orderData[r][deliveryCol] || '').toLowerCase();
-      if (currentDelivery !== 'delivered') deliveryCell.setValue('Delivered');
-      if (rec) paidRows.add(rec.row);
+      if (rec && rec.status === 'delivered') {
+        if (currentDelivery !== 'delivered') deliveryCell.setValue('Delivered');
+        paidRows.add(rec.row);
+      }
     }
     if (shippingStatus === 'dispatched') {
       let result = 'Dispatched – No COD ❌';
