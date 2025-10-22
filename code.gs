@@ -9,6 +9,27 @@ var PARCEL_CACHE_TTL = 24 * 60 * 60; // seconds
 // disable row highlighting to speed up large batch scans
 var HIGHLIGHT_ROWS = false;
 
+var NEW_INVOICE_SHEET_NAME = 'TCS Invoice (New Format)';
+var NEW_INVOICE_HEADERS = [
+  'CompanyName',
+  'ParcelNo',
+  'ThirdPartyNo',
+  'BookingDate',
+  'Consignee',
+  'Origin',
+  'Destination',
+  'Weight',
+  'CODAmount',
+  'DeliveryCharges',
+  'PaymentPeriod',
+  'Status',
+  'ItemType',
+  'SpecialInstruction'
+];
+var NEW_INVOICE_HEADER_KEYS = NEW_INVOICE_HEADERS.map(function(h) {
+  return h.trim().toLowerCase().replace(/\s+/g, '');
+});
+
 function getParcelIndex(sheet, parcelCol) {
   var cache = CacheService.getDocumentCache();
 
@@ -100,6 +121,9 @@ function invalidateParcelIndex() {
  * Add the custom menu.
  */
 function onOpen() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  ensureNewInvoiceSheet(ss);
+
   SpreadsheetApp.getUi()
     .createMenu('Scanner')
     .addItem('Open Scanner Sidebar', 'openScannerSidebar')
@@ -129,6 +153,15 @@ function openScannerSidebar() {
     .createHtmlOutputFromFile('ScannerSidebar')
     .setTitle('Parcel Scanner');
   SpreadsheetApp.getUi().showSidebar(html);
+}
+
+function ensureNewInvoiceSheet(ss) {
+  var sheet = ss.getSheetByName(NEW_INVOICE_SHEET_NAME);
+  if (!sheet) sheet = ss.insertSheet(NEW_INVOICE_SHEET_NAME);
+  if (sheet.getLastRow() === 0) {
+    sheet.getRange(1, 1, 1, NEW_INVOICE_HEADERS.length).setValues([NEW_INVOICE_HEADERS]);
+  }
+  return sheet;
 }
 
 /**
@@ -1139,8 +1172,17 @@ function uploadCodInvoice(fileData) {
   }
 
   var ss = SpreadsheetApp.getActiveSpreadsheet();
-  var sheet = ss.getSheetByName('TCS Invoice');
-  if (!sheet) sheet = ss.insertSheet('TCS Invoice');
+  ensureNewInvoiceSheet(ss);
+
+  var headerKeys = data[0].map(function(h) {
+    return String(h).trim().toLowerCase().replace(/\s+/g, '');
+  });
+  var targetSheetName = headerKeys.join('\u0001') === NEW_INVOICE_HEADER_KEYS.join('\u0001')
+    ? NEW_INVOICE_SHEET_NAME
+    : 'TCS Invoice';
+
+  var sheet = ss.getSheetByName(targetSheetName);
+  if (!sheet) sheet = ss.insertSheet(targetSheetName);
 
   var hasHeader = sheet.getLastRow() > 0;
   if (hasHeader) {
@@ -1161,47 +1203,88 @@ function uploadCodInvoice(fileData) {
 function reconcileCODPayments() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const orderSheet = ss.getSheetByName('Sheet1');
-  const invoiceSheet = ss.getSheetByName('TCS Invoice');
-  if (!orderSheet || !invoiceSheet) return;
+  if (!orderSheet) return;
+
+  ensureNewInvoiceSheet(ss);
 
   const orderData = orderSheet.getDataRange().getValues();
-  const invoiceData = invoiceSheet.getDataRange().getValues();
-  if (invoiceData.length < 2) return;
+  const invoiceSources = [];
 
-  // map invoice headers
-  const invHeaders = invoiceData[0].map(h => String(h).trim().toLowerCase().replace(/\s+/g, ''));
-  const parcelIdx = invHeaders.indexOf('parcelno');
-  const codIdx = invHeaders.indexOf('codamount');
-  const statusIdx = invHeaders.indexOf('status');
-  const specialIdx = invHeaders.indexOf('specialinstruction');
-  if (parcelIdx < 0 || codIdx < 0 || statusIdx < 0) return;
-
-  // build lookup of parcel → {status, cod, row}
-  const invoiceMap = {};
-  for (let i = 1; i < invoiceData.length; i++) {
-    const rawParcel = invoiceData[i][parcelIdx];
-    const cleaned = String(rawParcel).replace(/\s+/g, '').trim();
-    if (!cleaned) continue;
-    const status = String(invoiceData[i][statusIdx]).toLowerCase();
-    const entry = invoiceMap[cleaned];
-    const shouldReplace =
-      !entry ||
-      i > entry.row ||
-      (status === 'delivered' && entry.status !== 'delivered');
-    if (shouldReplace) {
-      invoiceMap[cleaned] = {
-        cod: invoiceData[i][codIdx],
-        status: status,
-        row: i
-      };
+  const invoiceSheet = ss.getSheetByName('TCS Invoice');
+  if (invoiceSheet) {
+    const data = invoiceSheet.getDataRange().getValues();
+    if (data.length > 1) {
+      const headers = data[0].map(h => String(h).trim().toLowerCase().replace(/\s+/g, ''));
+      const parcelIdx = headers.indexOf('parcelno');
+      const codIdx = headers.indexOf('codamount');
+      const statusIdx = headers.indexOf('status');
+      const specialIdx = headers.indexOf('specialinstruction');
+      if (parcelIdx >= 0 && codIdx >= 0 && statusIdx >= 0) {
+        invoiceSources.push({
+          sheet: invoiceSheet,
+          data: data,
+          parcelIdx: parcelIdx,
+          codIdx: codIdx,
+          statusIdx: statusIdx,
+          specialIdx: specialIdx
+        });
+      }
     }
   }
 
+  const newSheet = ss.getSheetByName(NEW_INVOICE_SHEET_NAME);
+  if (newSheet) {
+    const data = newSheet.getDataRange().getValues();
+    if (data.length > 1) {
+      const headers = data[0].map(h => String(h).trim().toLowerCase().replace(/\s+/g, ''));
+      const parcelIdx = headers.indexOf('parcelno');
+      const codIdx = headers.indexOf('codamount');
+      const statusIdx = headers.indexOf('status');
+      const specialIdx = headers.indexOf('specialinstruction');
+      if (parcelIdx >= 0 && codIdx >= 0 && statusIdx >= 0) {
+        invoiceSources.push({
+          sheet: newSheet,
+          data: data,
+          parcelIdx: parcelIdx,
+          codIdx: codIdx,
+          statusIdx: statusIdx,
+          specialIdx: specialIdx
+        });
+      }
+    }
+  }
+
+  if (!invoiceSources.length) return;
+
+  const invoiceMap = {};
+  invoiceSources.forEach((source, sourceIndex) => {
+    for (let i = 1; i < source.data.length; i++) {
+      const rawParcel = source.data[i][source.parcelIdx];
+      const cleaned = String(rawParcel).replace(/\s+/g, '').trim();
+      if (!cleaned) continue;
+      const status = String(source.data[i][source.statusIdx]).toLowerCase();
+      const entry = invoiceMap[cleaned];
+      const shouldReplace =
+        !entry ||
+        (status === 'delivered' && entry.status !== 'delivered') ||
+        (entry && entry.sourceIndex === sourceIndex && i > entry.row);
+      if (shouldReplace) {
+        invoiceMap[cleaned] = {
+          cod: source.data[i][source.codIdx],
+          status: status,
+          row: i,
+          sourceIndex: sourceIndex
+        };
+      }
+    }
+  });
+
   const matchedParcels = new Set();
-  const paidRows = new Set();
+  const paidRowsPerSource = invoiceSources.map(() => new Set());
 
   const headers = orderData[0];
   const parcelCol = headers.indexOf('Parcel number');
+  if (parcelCol < 0) return;
   let statusCol = headers.indexOf('Shipping Status');
   if (statusCol < 0) statusCol = headers.indexOf('Status');
   const deliveryCol = headers.indexOf('Delivery Status');
@@ -1228,7 +1311,7 @@ function reconcileCODPayments() {
       const currentDelivery = String(orderData[r][deliveryCol] || '').toLowerCase();
       if (rec && rec.status === 'delivered') {
         if (currentDelivery !== 'delivered') deliveryCell.setValue('Delivered');
-        paidRows.add(rec.row);
+        paidRowsPerSource[rec.sourceIndex].add(rec.row);
       }
     }
     if (shippingStatus === 'dispatched') {
@@ -1236,55 +1319,58 @@ function reconcileCODPayments() {
       if (rec && rec.status === 'delivered' && rec.cod && parseFloat(rec.cod) > 0) {
         result = 'Paid ✅';
         if (deliveryCell) deliveryCell.setValue('Delivered');
-        paidRows.add(rec.row);
+        paidRowsPerSource[rec.sourceIndex].add(rec.row);
       }
       orderSheet.getRange(r + 1, resultCol + 1).setValue(result);
     } else if (!shippingStatus && rec && rec.status === 'delivered' && rec.cod && parseFloat(rec.cod) > 0) {
       if (deliveryCell) deliveryCell.setValue('Delivered');
       orderSheet.getRange(r + 1, resultCol + 1).setValue('Paid ✅');
-      paidRows.add(rec.row);
+      paidRowsPerSource[rec.sourceIndex].add(rec.row);
     }
   }
 
-  // handle delivered parcels with 0 COD linked by order number
-  if (specialIdx >= 0 && orderCol >= 0 && amountCol >= 0) {
-    for (let i = 1; i < invoiceData.length; i++) {
-      const status = String(invoiceData[i][statusIdx]).toLowerCase();
-      const codVal = invoiceData[i][codIdx];
-      if (status === 'delivered' && (!codVal || parseFloat(codVal) === 0)) {
-        const instr = String(invoiceData[i][specialIdx] || '');
-        const match = instr.match(/(\d+)/);
-        if (match) {
-          const num = match[1];
-          const row = orderMap[num];
-          if (row !== undefined) {
-            const amount = orderData[row][amountCol];
-            if (!amount || parseFloat(amount) === 0) {
-              if (deliveryCol >= 0) orderSheet.getRange(row + 1, deliveryCol + 1).setValue('Delivered');
-              orderSheet.getRange(row + 1, resultCol + 1).setValue('Paid \u2013 Bank Transfer \u2705');
-              matchedParcels.add(String(invoiceData[i][parcelIdx]).replace(/\s+/g, '').trim());
-              paidRows.add(i);
+  if (orderCol >= 0 && amountCol >= 0) {
+    invoiceSources.forEach((source, sourceIndex) => {
+      if (source.specialIdx < 0) return;
+      for (let i = 1; i < source.data.length; i++) {
+        const status = String(source.data[i][source.statusIdx]).toLowerCase();
+        const codVal = source.data[i][source.codIdx];
+        if (status === 'delivered' && (!codVal || parseFloat(codVal) === 0)) {
+          const instr = String(source.data[i][source.specialIdx] || '');
+          const match = instr.match(/(\d+)/);
+          if (match) {
+            const num = match[1];
+            const row = orderMap[num];
+            if (row !== undefined) {
+              const amount = orderData[row][amountCol];
+              if (!amount || parseFloat(amount) === 0) {
+                if (deliveryCol >= 0) orderSheet.getRange(row + 1, deliveryCol + 1).setValue('Delivered');
+                orderSheet.getRange(row + 1, resultCol + 1).setValue('Paid \u2013 Bank Transfer \u2705');
+                matchedParcels.add(String(source.data[i][source.parcelIdx]).replace(/\s+/g, '').trim());
+                paidRowsPerSource[sourceIndex].add(i);
+              }
             }
           }
         }
       }
-    }
+    });
   }
 
-  // highlight invoice rows that were not matched or were paid
-  const lastCol = invoiceSheet.getLastColumn();
-  if (invoiceData.length > 1) {
-    invoiceSheet.getRange(2, 1, invoiceData.length - 1, lastCol).setBackground(null);
-    for (let i = 1; i < invoiceData.length; i++) {
-      const cleaned = String(invoiceData[i][parcelIdx]).replace(/\s+/g, '').trim();
-      const status = String(invoiceData[i][statusIdx]).toLowerCase();
-      if (status === 'delivered' && !matchedParcels.has(cleaned)) {
-        invoiceSheet.getRange(i + 1, 1, 1, lastCol).setBackground('#fff2cc');
-      } else if (paidRows.has(i)) {
-        invoiceSheet.getRange(i + 1, 1, 1, lastCol).setBackground('#ccffcc');
+  invoiceSources.forEach((source, sourceIndex) => {
+    const lastCol = source.sheet.getLastColumn();
+    if (source.data.length > 1) {
+      source.sheet.getRange(2, 1, source.data.length - 1, lastCol).setBackground(null);
+      for (let i = 1; i < source.data.length; i++) {
+        const cleaned = String(source.data[i][source.parcelIdx]).replace(/\s+/g, '').trim();
+        const status = String(source.data[i][source.statusIdx]).toLowerCase();
+        if (status === 'delivered' && !matchedParcels.has(cleaned)) {
+          source.sheet.getRange(i + 1, 1, 1, lastCol).setBackground('#fff2cc');
+        } else if (paidRowsPerSource[sourceIndex].has(i)) {
+          source.sheet.getRange(i + 1, 1, 1, lastCol).setBackground('#ccffcc');
+        }
       }
     }
-  }
+  });
 
   SpreadsheetApp.flush();
 }
