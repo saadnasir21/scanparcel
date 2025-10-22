@@ -253,6 +253,8 @@ function onEdit(e) {
     } else {
       updateReturnSummaries(products, quantities, orderAmt, todayMid);
     }
+    var orderNumber = orderCol ? String(rowData[orderCol - 1] || '').trim() : '';
+    restockShopifyOrder(orderNumber, oldStatus);
   }
 }
 
@@ -802,7 +804,8 @@ function shopifyCancelById(orderId) {
     headers: {
       'X-Shopify-Access-Token': token,
       'Content-Type'          : 'application/json'
-    }
+    },
+    payload: JSON.stringify({ restock: true })
   });
 
   Logger.log('Cancel ' + orderId + ' → ' +
@@ -835,6 +838,20 @@ function shopifyCancelByNumber(orderNumber) {
 }
 
 /**
+ * Cancel the Shopify order for a returned parcel when inventory should restock.
+ * Skips orders already marked returned or cancelled earlier.
+ */
+function restockShopifyOrder(orderNumber, previousStatus) {
+  if (!orderNumber) return;
+  var prev = String(previousStatus || '').trim().toLowerCase();
+  if (prev === 'returned' || prev === 'cancelled by customer') return;
+  var ok = shopifyCancelByNumber(orderNumber);
+  if (!ok) {
+    Logger.log('Shopify restock failed for order ' + orderNumber);
+  }
+}
+
+/**
  * Cancel a Shopify order by its numeric ID.
  * Returns true on 200 OK.
  */
@@ -848,7 +865,8 @@ function cancelOrderById(orderId) {
     method : 'post',
     muteHttpExceptions: true,
     headers: { 'X-Shopify-Access-Token': token,
-               'Content-Type': 'application/json' }
+               'Content-Type': 'application/json' },
+    payload: JSON.stringify({ restock: true })
   });
   return resp.getResponseCode() === 200;
 }
@@ -1009,10 +1027,12 @@ function manualSetStatus(parcelRaw, newStatus, dateStr) {
 
   var rowData   = data[foundRow - 1];
   var oldStatus = rowData[statusCol - 1];
+  var oldStatusTrim = String(oldStatus || '').trim();
   var oldDate   = rowData[dateCol - 1];
   var orderNum  = orderCol ? rowData[orderCol - 1] : '';
+  var newStatusLower = String(newStatus || '').trim().toLowerCase();
 
-  if (String(oldStatus).trim() === 'Cancelled by Customer' && newStatus === 'Dispatched') {
+  if (oldStatusTrim === 'Cancelled by Customer' && newStatus === 'Dispatched') {
     return 'WasCancelled';
   }
 
@@ -1047,6 +1067,11 @@ function manualSetStatus(parcelRaw, newStatus, dateStr) {
     updateDispatchInventoryOnly(products, quantities, orderAmt, dateObj, orderNum);
   } else if (newStatus === 'Returned') {
     updateReturnSummaries(products, quantities, orderAmt, dateObj);
+  }
+
+  if (newStatusLower === 'returned') {
+    var orderNumber = String(orderNum || '').trim();
+    restockShopifyOrder(orderNumber, oldStatusTrim);
   }
 
   return 'Updated';
