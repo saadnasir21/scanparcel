@@ -11,24 +11,31 @@ var HIGHLIGHT_ROWS = false;
 
 var NEW_INVOICE_SHEET_NAME = 'TCS Invoice (New Format)';
 var NEW_INVOICE_HEADERS = [
-  'CompanyName',
-  'ParcelNo',
-  'ThirdPartyNo',
-  'BookingDate',
+  'Consignment #',
+  'Cust Ref #',
+  'Shipper Name',
+  'Booking Date',
   'Consignee',
   'Origin',
   'Destination',
   'Weight',
-  'CODAmount',
-  'DeliveryCharges',
-  'PaymentPeriod',
-  'Status',
-  'ItemType',
-  'SpecialInstruction'
+  'Payment Period',
+  'Delivery Status',
+  'COD Amount',
+  'Shipping CHG.'
 ];
 var NEW_INVOICE_HEADER_KEYS = NEW_INVOICE_HEADERS.map(function(h) {
   return h.trim().toLowerCase().replace(/\s+/g, '');
 });
+
+function findHeaderIndex(headers, possibleKeys) {
+  if (!Array.isArray(possibleKeys)) possibleKeys = [possibleKeys];
+  for (var i = 0; i < possibleKeys.length; i++) {
+    var idx = headers.indexOf(possibleKeys[i]);
+    if (idx >= 0) return idx;
+  }
+  return -1;
+}
 
 function getParcelIndex(sheet, parcelCol) {
   var cache = CacheService.getDocumentCache();
@@ -1240,10 +1247,10 @@ function reconcileCODPayments() {
     const data = invoiceSheet.getDataRange().getValues();
     if (data.length > 1) {
       const headers = data[0].map(h => String(h).trim().toLowerCase().replace(/\s+/g, ''));
-      const parcelIdx = headers.indexOf('parcelno');
-      const codIdx = headers.indexOf('codamount');
-      const statusIdx = headers.indexOf('status');
-      const specialIdx = headers.indexOf('specialinstruction');
+      const parcelIdx = findHeaderIndex(headers, ['parcelno', 'consignment#']);
+      const codIdx = findHeaderIndex(headers, 'codamount');
+      const statusIdx = findHeaderIndex(headers, ['status', 'deliverystatus']);
+      const specialIdx = findHeaderIndex(headers, 'specialinstruction');
       if (parcelIdx >= 0 && codIdx >= 0 && statusIdx >= 0) {
         invoiceSources.push({
           sheet: invoiceSheet,
@@ -1262,10 +1269,10 @@ function reconcileCODPayments() {
     const data = newSheet.getDataRange().getValues();
     if (data.length > 1) {
       const headers = data[0].map(h => String(h).trim().toLowerCase().replace(/\s+/g, ''));
-      const parcelIdx = headers.indexOf('parcelno');
-      const codIdx = headers.indexOf('codamount');
-      const statusIdx = headers.indexOf('status');
-      const specialIdx = headers.indexOf('specialinstruction');
+      const parcelIdx = findHeaderIndex(headers, ['parcelno', 'consignment#']);
+      const codIdx = findHeaderIndex(headers, 'codamount');
+      const statusIdx = findHeaderIndex(headers, ['status', 'deliverystatus']);
+      const specialIdx = findHeaderIndex(headers, 'specialinstruction');
       if (parcelIdx >= 0 && codIdx >= 0 && statusIdx >= 0) {
         invoiceSources.push({
           sheet: newSheet,
