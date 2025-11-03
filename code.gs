@@ -849,23 +849,31 @@ function shopifyCancelByNumber(orderNumber) {
  * Skips orders already marked returned or cancelled earlier.
  */
 function restockShopifyOrder(orderNumber, previousStatus, orderAmount) {
-  if (!orderNumber) return;
+  if (!orderNumber) return { status: 'missing' };
   var prev = String(previousStatus || '').trim().toLowerCase();
-  if (prev === 'returned' || prev === 'cancelled by customer') return;
+  if (prev === 'returned' || prev === 'cancelled by customer') {
+    return { status: 'skipped' };
+  }
 
   var orderId = shopifyFindOrderId(orderNumber);
   if (!orderId) {
     Logger.log('Shopify order not found for ' + orderNumber);
-    return;
+    return { status: 'notFound' };
   }
 
   var refunded = shopifyRefundReturnById(orderId, orderAmount);
-  if (!refunded) {
-    var ok = shopifyCancelById(orderId);
-    if (!ok) {
-      Logger.log('Shopify restock failed for order ' + orderNumber);
-    }
+  if (refunded) {
+    Logger.log('Shopify refund succeeded for order ' + orderNumber);
+    return { status: 'refunded' };
   }
+
+  var ok = shopifyCancelById(orderId);
+  if (!ok) {
+    Logger.log('Shopify restock failed for order ' + orderNumber);
+    return { status: 'failed' };
+  }
+
+  return { status: 'cancelled' };
 }
 
 function shopifyRefundReturnById(orderId, orderAmount) {
@@ -1047,6 +1055,7 @@ function cancelOrderByCustomer(parcelNumberRaw) {
   var statusCol = head.indexOf("Shipping Status") + 1;
   var dateCol   = head.indexOf("Dispatch Date") + 1;
   var orderCol  = head.indexOf("Order Number") + 1;
+  var amountCol = head.indexOf("Amount") + 1;
 
   if (!parcelCol || !statusCol || !orderCol) return 'MissingHeaders';
 
@@ -1071,15 +1080,18 @@ function cancelOrderByCustomer(parcelNumberRaw) {
   var todayMid = new Date(); todayMid.setHours(0, 0, 0, 0);
   sheet.getRange(foundRow, dateCol).setValue(todayMid);
 
-  // Cancel on Shopify
-  var orderName = rowData[orderCol - 1];
-  var orderId = findOrderIdByName(orderName);
-  if (orderId) {
-    var ok = cancelOrderById(orderId);
-    return ok ? 'Cancelled' : 'ShopifyFail';
-  } else {
+  // Sync to Shopify (refund/cancel so net sales reflect a return)
+  var orderName   = rowData[orderCol - 1];
+  var orderAmount = amountCol ? Number(rowData[amountCol - 1] || 0) : 0;
+  var syncResult  = restockShopifyOrder(String(orderName || ''), currentStatus, orderAmount);
+
+  if (!orderName || !syncResult || syncResult.status === 'missing' || syncResult.status === 'notFound') {
     return 'OrderNotFoundOnShopify';
   }
+  if (syncResult.status === 'failed') {
+    return 'ShopifyFail';
+  }
+  return 'Cancelled';
 }
 
 /**
@@ -1097,6 +1109,7 @@ function cancelOrderByNumber(orderNumRaw) {
   var orderCol  = head.indexOf("Order Number") + 1;
   var statusCol = head.indexOf("Shipping Status") + 1;
   var dateCol   = head.indexOf("Dispatch Date") + 1;
+  var amountCol = head.indexOf("Amount") + 1;
 
   if (!orderCol || !statusCol || !dateCol) return 'MissingHeaders';
 
@@ -1121,14 +1134,17 @@ function cancelOrderByNumber(orderNumRaw) {
   var todayMid = new Date(); todayMid.setHours(0, 0, 0, 0);
   sheet.getRange(foundRow, dateCol).setValue(todayMid);
 
-  var orderName = rowData[orderCol - 1];
-  var orderId   = findOrderIdByName(orderName);
-  if (orderId) {
-    var ok = cancelOrderById(orderId);
-    return ok ? 'Cancelled' : 'ShopifyFail';
-  } else {
+  var orderName   = rowData[orderCol - 1];
+  var orderAmount = amountCol ? Number(rowData[amountCol - 1] || 0) : 0;
+  var syncResult  = restockShopifyOrder(String(orderName || ''), status, orderAmount);
+
+  if (!orderName || !syncResult || syncResult.status === 'missing' || syncResult.status === 'notFound') {
     return 'OrderNotFoundOnShopify';
   }
+  if (syncResult.status === 'failed') {
+    return 'ShopifyFail';
+  }
+  return 'Cancelled';
 }
 
 
