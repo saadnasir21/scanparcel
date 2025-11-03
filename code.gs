@@ -261,7 +261,7 @@ function onEdit(e) {
       updateReturnSummaries(products, quantities, orderAmt, todayMid);
     }
     var orderNumber = orderCol ? String(rowData[orderCol - 1] || '').trim() : '';
-    restockShopifyOrder(orderNumber, oldStatus);
+    restockShopifyOrder(orderNumber, oldStatus, orderAmt);
   }
 }
 
@@ -848,14 +848,151 @@ function shopifyCancelByNumber(orderNumber) {
  * Cancel the Shopify order for a returned parcel when inventory should restock.
  * Skips orders already marked returned or cancelled earlier.
  */
-function restockShopifyOrder(orderNumber, previousStatus) {
+function restockShopifyOrder(orderNumber, previousStatus, orderAmount) {
   if (!orderNumber) return;
   var prev = String(previousStatus || '').trim().toLowerCase();
   if (prev === 'returned' || prev === 'cancelled by customer') return;
-  var ok = shopifyCancelByNumber(orderNumber);
-  if (!ok) {
-    Logger.log('Shopify restock failed for order ' + orderNumber);
+
+  var orderId = shopifyFindOrderId(orderNumber);
+  if (!orderId) {
+    Logger.log('Shopify order not found for ' + orderNumber);
+    return;
   }
+
+  var refunded = shopifyRefundReturnById(orderId, orderAmount);
+  if (!refunded) {
+    var ok = shopifyCancelById(orderId);
+    if (!ok) {
+      Logger.log('Shopify restock failed for order ' + orderNumber);
+    }
+  }
+}
+
+function shopifyRefundReturnById(orderId, orderAmount) {
+  try {
+    var order = shopifyGetOrder(orderId);
+    if (!order) return false;
+
+    var lineItems = order.line_items || [];
+    if (!lineItems.length) return false;
+
+    var defaultLocationId = order.location_id || null;
+    var refundLineItems = [];
+    for (var i = 0; i < lineItems.length; i++) {
+      var item = lineItems[i];
+      var locId = item.location_id || (item.origin_location && item.origin_location.id) || defaultLocationId;
+      var refundLine = {
+        line_item_id: item.id,
+        quantity: item.quantity,
+        restock_type: locId ? 'return' : 'no_restock'
+      };
+      if (locId) refundLine.location_id = locId;
+      refundLineItems.push(refundLine);
+    }
+
+    if (!refundLineItems.length) return false;
+
+    var amountNumber = Number(orderAmount || 0);
+    if (!amountNumber && order.total_price) amountNumber = Number(order.total_price);
+    if (!amountNumber && order.current_total_price) amountNumber = Number(order.current_total_price);
+    if (!amountNumber && order.total_price_set && order.total_price_set.shop_money) {
+      amountNumber = Number(order.total_price_set.shop_money.amount);
+    }
+    if (!amountNumber) return false;
+    var amountStr = amountNumber.toFixed(2);
+
+    var transactions = shopifyGetOrderTransactions(orderId);
+    if (!transactions || !transactions.length) return false;
+    var parentTx = null;
+    for (var t = 0; t < transactions.length; t++) {
+      var kind = String(transactions[t].kind || '').toLowerCase();
+      if (kind === 'sale' || kind === 'capture') {
+        parentTx = transactions[t];
+        break;
+      }
+      if (!parentTx && (kind === 'authorization' || kind === 'pending')) {
+        parentTx = transactions[t];
+      }
+    }
+    if (!parentTx) parentTx = transactions[0];
+    if (!parentTx || !parentTx.id) return false;
+
+    var refundKind = String(parentTx.kind || '').toLowerCase() === 'authorization' ? 'void' : 'refund';
+    var payload = {
+      refund: {
+        notify: false,
+        note: 'Auto return recorded from sheet',
+        shipping: { full_refund: true },
+        refund_line_items: refundLineItems,
+        transactions: [
+          {
+            parent_id: parentTx.id,
+            amount: amountStr,
+            kind: refundKind,
+            gateway: parentTx.gateway
+          }
+        ]
+      }
+    };
+
+    var props = PropertiesService.getScriptProperties();
+    var token = props.getProperty('SHOP_TOKEN');
+    var domain = props.getProperty('SHOP_DOMAIN');
+    if (!token || !domain) return false;
+
+    var url = 'https://' + domain + '/admin/api/2024-01/orders/' + orderId + '/refunds.json';
+    var resp = UrlFetchApp.fetch(url, {
+      method: 'post',
+      muteHttpExceptions: true,
+      headers: {
+        'X-Shopify-Access-Token': token,
+        'Content-Type': 'application/json'
+      },
+      payload: JSON.stringify(payload)
+    });
+
+    var code = resp.getResponseCode();
+    if (code >= 200 && code < 300) {
+      return true;
+    }
+
+    Logger.log('Shopify refund failed for order ' + orderId + ': ' + code + ' ' + resp.getContentText().slice(0, 120));
+  } catch (err) {
+    Logger.log('Shopify refund exception for order ' + orderId + ': ' + err);
+  }
+  return false;
+}
+
+function shopifyGetOrder(orderId) {
+  var props = PropertiesService.getScriptProperties();
+  var token = props.getProperty('SHOP_TOKEN');
+  var domain = props.getProperty('SHOP_DOMAIN');
+  if (!token || !domain) return null;
+
+  var url = 'https://' + domain + '/admin/api/2024-01/orders/' + orderId + '.json';
+  var resp = UrlFetchApp.fetch(url, {
+    muteHttpExceptions: true,
+    headers: { 'X-Shopify-Access-Token': token }
+  });
+  if (resp.getResponseCode() !== 200) return null;
+  var data = JSON.parse(resp.getContentText());
+  return data.order || null;
+}
+
+function shopifyGetOrderTransactions(orderId) {
+  var props = PropertiesService.getScriptProperties();
+  var token = props.getProperty('SHOP_TOKEN');
+  var domain = props.getProperty('SHOP_DOMAIN');
+  if (!token || !domain) return [];
+
+  var url = 'https://' + domain + '/admin/api/2024-01/orders/' + orderId + '/transactions.json';
+  var resp = UrlFetchApp.fetch(url, {
+    muteHttpExceptions: true,
+    headers: { 'X-Shopify-Access-Token': token }
+  });
+  if (resp.getResponseCode() !== 200) return [];
+  var data = JSON.parse(resp.getContentText());
+  return data.transactions || [];
 }
 
 /**
@@ -1078,7 +1215,7 @@ function manualSetStatus(parcelRaw, newStatus, dateStr) {
 
   if (newStatusLower === 'returned') {
     var orderNumber = String(orderNum || '').trim();
-    restockShopifyOrder(orderNumber, oldStatusTrim);
+    restockShopifyOrder(orderNumber, oldStatusTrim, orderAmt);
   }
 
   return 'Updated';
