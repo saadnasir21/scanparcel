@@ -1456,7 +1456,7 @@ function reconcileCODPayments() {
       const rawParcel = source.data[i][source.parcelIdx];
       const cleaned = String(rawParcel).replace(/\s+/g, '').trim();
       if (!cleaned) continue;
-      const status = String(source.data[i][source.statusIdx]).toLowerCase();
+      const status = String(source.data[i][source.statusIdx]).trim().toLowerCase();
       const entry = invoiceMap[cleaned];
       const shouldReplace =
         !entry ||
@@ -1495,14 +1495,14 @@ function reconcileCODPayments() {
   }
 
   for (let r = 1; r < orderData.length; r++) {
-    const shippingStatus = statusCol >= 0 ? String(orderData[r][statusCol]).toLowerCase() : '';
+    const shippingStatus = statusCol >= 0 ? String(orderData[r][statusCol]).trim().toLowerCase() : '';
     const rawParcel = String(orderData[r][parcelCol] || '').replace(/\s+/g, '').trim();
     const rec = invoiceMap[rawParcel];
     if (rec) matchedParcels.add(rawParcel);
     const deliveryCell = deliveryCol >= 0 ? orderSheet.getRange(r + 1, deliveryCol + 1) : null;
     const currentResult = String(orderData[r][resultCol] || '').trim();
     if (currentResult === 'Paid ✅' && deliveryCell) {
-      const currentDelivery = String(orderData[r][deliveryCol] || '').toLowerCase();
+      const currentDelivery = String(orderData[r][deliveryCol] || '').trim().toLowerCase();
       if (rec && rec.status === 'delivered') {
         if (currentDelivery !== 'delivered') deliveryCell.setValue('Delivered');
         paidRowsPerSource[rec.sourceIndex].add(rec.row);
@@ -1527,7 +1527,7 @@ function reconcileCODPayments() {
     invoiceSources.forEach((source, sourceIndex) => {
       if (source.specialIdx < 0) return;
       for (let i = 1; i < source.data.length; i++) {
-        const status = String(source.data[i][source.statusIdx]).toLowerCase();
+        const status = String(source.data[i][source.statusIdx]).trim().toLowerCase();
         const codVal = normalizeInvoiceAmount(source.data[i][source.codIdx]);
         if (status === 'delivered' && (!codVal || codVal === 0)) {
           const instr = String(source.data[i][source.specialIdx] || '');
@@ -1556,7 +1556,7 @@ function reconcileCODPayments() {
       source.sheet.getRange(2, 1, source.data.length - 1, lastCol).setBackground(null);
       for (let i = 1; i < source.data.length; i++) {
         const cleaned = String(source.data[i][source.parcelIdx]).replace(/\s+/g, '').trim();
-        const status = String(source.data[i][source.statusIdx]).toLowerCase();
+        const status = String(source.data[i][source.statusIdx]).trim().toLowerCase();
         if (status === 'delivered' && !matchedParcels.has(cleaned)) {
           source.sheet.getRange(i + 1, 1, 1, lastCol).setBackground('#fff2cc');
         } else if (paidRowsPerSource[sourceIndex].has(i)) {
