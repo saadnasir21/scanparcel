@@ -174,8 +174,33 @@ function openScannerSidebar() {
 function ensureNewInvoiceSheet(ss) {
   var sheet = ss.getSheetByName(NEW_INVOICE_SHEET_NAME);
   if (!sheet) sheet = ss.insertSheet(NEW_INVOICE_SHEET_NAME);
-  if (sheet.getLastRow() === 0) {
-    sheet.getRange(1, 1, 1, NEW_INVOICE_HEADERS.length).setValues([NEW_INVOICE_HEADERS]);
+  var requiredCols = NEW_INVOICE_HEADERS.length;
+  if (sheet.getMaxColumns() < requiredCols) {
+    sheet.insertColumnsAfter(sheet.getMaxColumns(), requiredCols - sheet.getMaxColumns());
+  }
+
+  var headerWidth = Math.max(sheet.getLastColumn(), requiredCols);
+  var headerRange = sheet.getRange(1, 1, 1, headerWidth);
+  var needsHeader = sheet.getLastRow() === 0;
+
+  if (!needsHeader) {
+    var currentHeaders = headerRange.getValues()[0];
+    var normalized = currentHeaders.slice(0, requiredCols).map(function(h) {
+      return String(h).trim().toLowerCase().replace(/\s+/g, '');
+    });
+    var hasExactKeys = normalized.join('\u0001') === NEW_INVOICE_HEADER_KEYS.join('\u0001');
+    var hasExactLabels = currentHeaders.slice(0, requiredCols).every(function(h, i) {
+      return String(h) === NEW_INVOICE_HEADERS[i];
+    });
+    needsHeader = !hasExactKeys || !hasExactLabels;
+  }
+
+  if (needsHeader) {
+    sheet.getRange(1, 1, 1, requiredCols).setValues([NEW_INVOICE_HEADERS]);
+  }
+
+  if (headerWidth > requiredCols) {
+    sheet.getRange(1, requiredCols + 1, 1, headerWidth - requiredCols).clearContent();
   }
   return sheet;
 }
