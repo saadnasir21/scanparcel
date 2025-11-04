@@ -28,6 +28,15 @@ var NEW_INVOICE_HEADER_KEYS = NEW_INVOICE_HEADERS.map(function(h) {
   return h.trim().toLowerCase().replace(/\s+/g, '');
 });
 
+function normalizeInvoiceAmount(value) {
+  if (typeof value === 'number') return isNaN(value) ? 0 : value;
+  if (value === null || value === undefined) return 0;
+  var str = String(value).replace(/[^0-9.\-]+/g, '');
+  if (!str) return 0;
+  var num = parseFloat(str);
+  return isNaN(num) ? 0 : num;
+}
+
 function findHeaderIndex(headers, possibleKeys) {
   if (!Array.isArray(possibleKeys)) possibleKeys = [possibleKeys];
   for (var i = 0; i < possibleKeys.length; i++) {
@@ -1455,7 +1464,7 @@ function reconcileCODPayments() {
         (entry && entry.sourceIndex === sourceIndex && i > entry.row);
       if (shouldReplace) {
         invoiceMap[cleaned] = {
-          cod: source.data[i][source.codIdx],
+          cod: normalizeInvoiceAmount(source.data[i][source.codIdx]),
           status: status,
           row: i,
           sourceIndex: sourceIndex
@@ -1501,13 +1510,13 @@ function reconcileCODPayments() {
     }
     if (shippingStatus === 'dispatched') {
       let result = 'Dispatched – No COD ❌';
-      if (rec && rec.status === 'delivered' && rec.cod && parseFloat(rec.cod) > 0) {
+      if (rec && rec.status === 'delivered' && rec.cod && rec.cod > 0) {
         result = 'Paid ✅';
         if (deliveryCell) deliveryCell.setValue('Delivered');
         paidRowsPerSource[rec.sourceIndex].add(rec.row);
       }
       orderSheet.getRange(r + 1, resultCol + 1).setValue(result);
-    } else if (!shippingStatus && rec && rec.status === 'delivered' && rec.cod && parseFloat(rec.cod) > 0) {
+    } else if (!shippingStatus && rec && rec.status === 'delivered' && rec.cod && rec.cod > 0) {
       if (deliveryCell) deliveryCell.setValue('Delivered');
       orderSheet.getRange(r + 1, resultCol + 1).setValue('Paid ✅');
       paidRowsPerSource[rec.sourceIndex].add(rec.row);
@@ -1519,8 +1528,8 @@ function reconcileCODPayments() {
       if (source.specialIdx < 0) return;
       for (let i = 1; i < source.data.length; i++) {
         const status = String(source.data[i][source.statusIdx]).toLowerCase();
-        const codVal = source.data[i][source.codIdx];
-        if (status === 'delivered' && (!codVal || parseFloat(codVal) === 0)) {
+        const codVal = normalizeInvoiceAmount(source.data[i][source.codIdx]);
+        if (status === 'delivered' && (!codVal || codVal === 0)) {
           const instr = String(source.data[i][source.specialIdx] || '');
           const match = instr.match(/(\d+)/);
           if (match) {
