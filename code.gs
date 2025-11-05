@@ -1525,26 +1525,28 @@ function reconcileCODPayments() {
     const rec = invoiceMap[rawParcel];
     if (rec) matchedParcels.add(rawParcel);
     const deliveryCell = deliveryCol >= 0 ? orderSheet.getRange(r + 1, deliveryCol + 1) : null;
+    const currentDelivery = deliveryCol >= 0 ? String(orderData[r][deliveryCol] || '').trim().toLowerCase() : '';
     const currentResult = String(orderData[r][resultCol] || '').trim();
-    if (currentResult === 'Paid ✅' && deliveryCell) {
-      const currentDelivery = String(orderData[r][deliveryCol] || '').trim().toLowerCase();
-      if (rec && rec.status === 'delivered') {
-        if (currentDelivery !== 'delivered') deliveryCell.setValue('Delivered');
-        paidRowsPerSource[rec.sourceIndex].add(rec.row);
+    const currentResultLower = currentResult.toLowerCase();
+    const hasManualPaid = currentResultLower.indexOf('paid') === 0;
+    const invoiceDelivered = !!rec && rec.status === 'delivered';
+    const hasPositiveCOD = invoiceDelivered && rec.cod && rec.cod > 0;
+
+    if (invoiceDelivered && deliveryCell && currentDelivery !== 'delivered') {
+      deliveryCell.setValue('Delivered');
+    }
+
+    if (hasPositiveCOD) {
+      paidRowsPerSource[rec.sourceIndex].add(rec.row);
+      if (!hasManualPaid) {
+        orderSheet.getRange(r + 1, resultCol + 1).setValue('Paid ✅');
       }
     }
+
     if (shippingStatus === 'dispatched') {
-      let result = 'Dispatched – No COD ❌';
-      if (rec && rec.status === 'delivered' && rec.cod && rec.cod > 0) {
-        result = 'Paid ✅';
-        if (deliveryCell) deliveryCell.setValue('Delivered');
-        paidRowsPerSource[rec.sourceIndex].add(rec.row);
+      if (!hasPositiveCOD && !hasManualPaid) {
+        orderSheet.getRange(r + 1, resultCol + 1).setValue('Dispatched – No COD ❌');
       }
-      orderSheet.getRange(r + 1, resultCol + 1).setValue(result);
-    } else if (!shippingStatus && rec && rec.status === 'delivered' && rec.cod && rec.cod > 0) {
-      if (deliveryCell) deliveryCell.setValue('Delivered');
-      orderSheet.getRange(r + 1, resultCol + 1).setValue('Paid ✅');
-      paidRowsPerSource[rec.sourceIndex].add(rec.row);
     }
   }
 
