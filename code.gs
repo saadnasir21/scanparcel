@@ -1534,6 +1534,9 @@ function reconcileCODPayments() {
       }
     }
     if (shippingStatus === 'dispatched') {
+      if (currentResult === 'Paid ✅') {
+        continue;
+      }
       let result = 'Dispatched – No COD ❌';
       if (rec && rec.status === 'delivered' && rec.cod && rec.cod > 0) {
         result = 'Paid ✅';
