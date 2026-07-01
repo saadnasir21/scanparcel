@@ -9,6 +9,73 @@ var PARCEL_CACHE_TTL = 24 * 60 * 60; // seconds
 // disable row highlighting to speed up large batch scans
 var HIGHLIGHT_ROWS = false;
 
+
+var SHOPIFY_API_VERSION = '2026-07';
+
+function getShopifyDomain_() {
+  var props = PropertiesService.getScriptProperties();
+  return props.getProperty('SHOP_DOMAIN') || props.getProperty('SHOPIFY_SHOP') || '';
+}
+
+function getShopifyAccessToken_() {
+  var props = PropertiesService.getScriptProperties();
+  var legacyToken = props.getProperty('SHOP_TOKEN');
+  if (legacyToken) return legacyToken;
+
+  var domain = getShopifyDomain_();
+  var clientId = props.getProperty('SHOPIFY_CLIENT_ID');
+  var clientSecret = props.getProperty('SHOPIFY_CLIENT_SECRET');
+  if (!domain || !clientId || !clientSecret) {
+    Logger.log('Shopify credentials missing. Set SHOP_DOMAIN, SHOPIFY_CLIENT_ID, and SHOPIFY_CLIENT_SECRET in Script properties.');
+    return '';
+  }
+
+  var cache = CacheService.getScriptCache();
+  var cacheKey = 'shopify_access_token_' + domain;
+  var cached = cache.get(cacheKey);
+  if (cached) return cached;
+
+  var resp = UrlFetchApp.fetch('https://' + domain + '/admin/oauth/access_token', {
+    method: 'post',
+    contentType: 'application/x-www-form-urlencoded',
+    muteHttpExceptions: true,
+    payload: {
+      grant_type: 'client_credentials',
+      client_id: clientId,
+      client_secret: clientSecret
+    }
+  });
+
+  var code = resp.getResponseCode();
+  var body = resp.getContentText();
+  if (code < 200 || code >= 300) {
+    Logger.log('Shopify token request failed: ' + code + ' ' + body.slice(0, 200));
+    return '';
+  }
+
+  var data = JSON.parse(body);
+  var token = data.access_token || '';
+  if (token) cache.put(cacheKey, token, 50 * 60);
+  return token;
+}
+
+function getShopifyApiUrl_(path) {
+  var domain = getShopifyDomain_();
+  return domain ? 'https://' + domain + '/admin/api/' + SHOPIFY_API_VERSION + path : '';
+}
+
+function shopifyFetch_(path, options) {
+  var token = getShopifyAccessToken_();
+  var url = getShopifyApiUrl_(path);
+  if (!token || !url) return null;
+
+  var request = options || {};
+  request.muteHttpExceptions = true;
+  request.headers = request.headers || {};
+  request.headers['X-Shopify-Access-Token'] = token;
+  return UrlFetchApp.fetch(url, request);
+}
+
 var NEW_INVOICE_SHEET_NAME = 'TCS Invoice (New Format)';
 var NEW_INVOICE_HEADERS = [
   'Consignment #',
@@ -294,8 +361,15 @@ function onEdit(e) {
     } else {
       updateReturnSummaries(products, quantities, orderAmt, todayMid);
     }
-    var orderNumber = orderCol ? String(rowData[orderCol - 1] || '').trim() : '';
-    restockShopifyOrder(orderNumber, oldStatus, orderAmt);
+    var returnOrderNumber = orderCol ? String(rowData[orderCol - 1] || '').trim() : '';
+    restockShopifyOrder(returnOrderNumber, oldStatus, orderAmt);
+  } else if (statusLower === 'cancelled by customer' || statusLower === 'cancelled' || statusLower === 'canceled') {
+    dateCell.setValue(todayMid);
+    var cancelOrderNumber = orderCol ? String(rowData[orderCol - 1] || '').trim() : '';
+    var cancelResult = restockShopifyOrder(cancelOrderNumber, oldStatus, orderAmt);
+    if (!cancelResult || cancelResult.status === 'failed' || cancelResult.status === 'notFound') {
+      Logger.log('Shopify cancel sync failed for manually edited order ' + cancelOrderNumber + ': ' + JSON.stringify(cancelResult));
+    }
   }
 }
 
@@ -829,25 +903,15 @@ function reverseReturnSummaries(products, quantities, amount, dateObj) {
 }
 /** Cancel an order by its Shopify numeric ID.  Returns true on 200 OK */
 function shopifyCancelById(orderId) {
-  const props  = PropertiesService.getScriptProperties();
-  const token  = props.getProperty('SHOP_TOKEN');
-  const domain = props.getProperty('SHOP_DOMAIN');
-  if (!token || !domain) {
-    Logger.log('Shopify creds missing');   // check Script properties
+  const resp = shopifyFetch_('/orders/' + orderId + '/cancel.json', {
+    method : 'post',
+    headers: { 'Content-Type': 'application/json' },
+    payload: JSON.stringify({ restock: true, reason: 'customer' })
+  });
+  if (!resp) {
+    Logger.log('Shopify creds missing');
     return false;
   }
-
-  const url  = 'https://' + domain +
-               '/admin/api/2024-01/orders/' + orderId + '/cancel.json';
-  const resp = UrlFetchApp.fetch(url, {
-    method : 'post',
-    muteHttpExceptions: true,
-    headers: {
-      'X-Shopify-Access-Token': token,
-      'Content-Type'          : 'application/json'
-    },
-    payload: JSON.stringify({ restock: true })
-  });
 
   Logger.log('Cancel ' + orderId + ' → ' +
              resp.getResponseCode() + ' : ' +
@@ -857,17 +921,9 @@ function shopifyCancelById(orderId) {
 
 /** Lookup the numeric ID from an order NAME/# (e.g. "#88768HN18"). */
 function shopifyFindOrderId(orderNumber) {
-  const props  = PropertiesService.getScriptProperties();
-  const token  = props.getProperty('SHOP_TOKEN');
-  const domain = props.getProperty('SHOP_DOMAIN');
-  if (!token || !domain) return null;
-
   const name = orderNumber.replace('#','');          // API expects no hash
-  const url  = 'https://' + domain +
-               '/admin/api/2024-01/orders.json?name=' + encodeURIComponent(name);
-  const resp = UrlFetchApp.fetch(url, {
-    headers: { 'X-Shopify-Access-Token': token }
-  });
+  const resp = shopifyFetch_('/orders.json?name=' + encodeURIComponent(name), {});
+  if (!resp) return null;
   const list = JSON.parse(resp.getContentText()).orders || [];
   return list.length ? list[0].id : null;
 }
@@ -977,21 +1033,12 @@ function shopifyRefundReturnById(orderId, orderAmount) {
       }
     };
 
-    var props = PropertiesService.getScriptProperties();
-    var token = props.getProperty('SHOP_TOKEN');
-    var domain = props.getProperty('SHOP_DOMAIN');
-    if (!token || !domain) return false;
-
-    var url = 'https://' + domain + '/admin/api/2024-01/orders/' + orderId + '/refunds.json';
-    var resp = UrlFetchApp.fetch(url, {
+    var resp = shopifyFetch_('/orders/' + orderId + '/refunds.json', {
       method: 'post',
-      muteHttpExceptions: true,
-      headers: {
-        'X-Shopify-Access-Token': token,
-        'Content-Type': 'application/json'
-      },
+      headers: { 'Content-Type': 'application/json' },
       payload: JSON.stringify(payload)
     });
+    if (!resp) return false;
 
     var code = resp.getResponseCode();
     if (code >= 200 && code < 300) {
@@ -1006,32 +1053,16 @@ function shopifyRefundReturnById(orderId, orderAmount) {
 }
 
 function shopifyGetOrder(orderId) {
-  var props = PropertiesService.getScriptProperties();
-  var token = props.getProperty('SHOP_TOKEN');
-  var domain = props.getProperty('SHOP_DOMAIN');
-  if (!token || !domain) return null;
-
-  var url = 'https://' + domain + '/admin/api/2024-01/orders/' + orderId + '.json';
-  var resp = UrlFetchApp.fetch(url, {
-    muteHttpExceptions: true,
-    headers: { 'X-Shopify-Access-Token': token }
-  });
+  var resp = shopifyFetch_('/orders/' + orderId + '.json', {});
+  if (!resp) return null;
   if (resp.getResponseCode() !== 200) return null;
   var data = JSON.parse(resp.getContentText());
   return data.order || null;
 }
 
 function shopifyGetOrderTransactions(orderId) {
-  var props = PropertiesService.getScriptProperties();
-  var token = props.getProperty('SHOP_TOKEN');
-  var domain = props.getProperty('SHOP_DOMAIN');
-  if (!token || !domain) return [];
-
-  var url = 'https://' + domain + '/admin/api/2024-01/orders/' + orderId + '/transactions.json';
-  var resp = UrlFetchApp.fetch(url, {
-    muteHttpExceptions: true,
-    headers: { 'X-Shopify-Access-Token': token }
-  });
+  var resp = shopifyFetch_('/orders/' + orderId + '/transactions.json', {});
+  if (!resp) return [];
   if (resp.getResponseCode() !== 200) return [];
   var data = JSON.parse(resp.getContentText());
   return data.transactions || [];
@@ -1042,18 +1073,12 @@ function shopifyGetOrderTransactions(orderId) {
  * Returns true on 200 OK.
  */
 function cancelOrderById(orderId) {
-  var token  = PropertiesService.getScriptProperties().getProperty('SHOP_TOKEN');
-  var domain = PropertiesService.getScriptProperties().getProperty('SHOP_DOMAIN');
-  if (!token || !domain) throw new Error('Shopify creds missing in script properties.');
-
-  var url  = 'https://' + domain + '/admin/api/2024-01/orders/' + orderId + '/cancel.json';
-  var resp = UrlFetchApp.fetch(url, {
+  var resp = shopifyFetch_('/orders/' + orderId + '/cancel.json', {
     method : 'post',
-    muteHttpExceptions: true,
-    headers: { 'X-Shopify-Access-Token': token,
-               'Content-Type': 'application/json' },
-    payload: JSON.stringify({ restock: true })
+    headers: { 'Content-Type': 'application/json' },
+    payload: JSON.stringify({ restock: true, reason: 'customer' })
   });
+  if (!resp) throw new Error('Shopify creds missing in script properties.');
   return resp.getResponseCode() === 200;
 }
 
@@ -1062,13 +1087,8 @@ function cancelOrderById(orderId) {
  * Returns ID or null.
  */
 function findOrderIdByName(orderName) {
-  var token  = PropertiesService.getScriptProperties().getProperty('SHOP_TOKEN');
-  var domain = PropertiesService.getScriptProperties().getProperty('SHOP_DOMAIN');
-  var url    = 'https://' + domain +
-    '/admin/api/2024-01/orders.json?name=' + encodeURIComponent(orderName.replace('#',''));
-  var resp = UrlFetchApp.fetch(url, {
-    headers: { 'X-Shopify-Access-Token': token }
-  });
+  var resp = shopifyFetch_('/orders.json?name=' + encodeURIComponent(orderName.replace('#','')), {});
+  if (!resp) return null;
   var list = JSON.parse(resp.getContentText()).orders || [];
   return list.length ? list[0].id : null;
 }
