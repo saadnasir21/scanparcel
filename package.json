@@ -1,0 +1,17 @@
+{
+  "name": "scanparcel",
+  "version": "1.0.0",
+  "description": "This repository contains a Google Apps Script used to scan parcel numbers and update a Google Sheets document. The script adds a custom menu and a sidebar that allows you to scan or manually input parcel codes. It also integrates with Shopify to cancel orders when parcels are returned.",
+  "main": "index.js",
+  "scripts": {
+    "test": "node __tests__/ScannerSidebar.test.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "@sinonjs/fake-timers": "^9.1.2",
+    "jsdom": "^26.1.0"
+  }
+}
